@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using ElasticKilla.Core.Indexes;
 
 namespace ElasticKilla.Core.Indexers
@@ -13,15 +14,16 @@ namespace ElasticKilla.Core.Indexers
 
         private readonly IIndex<TValue, TKey> _inverted;
 
-        public void Add(TKey resource, TValue item) => _forward.Add(resource, item);
+        public void Add(TKey query, TValue value) => _forward.Add(query, value);
 
-        public void Add(TKey resource, IEnumerable<TValue> items) => _forward.Add(resource, items);
+        public void Add(TKey query, IEnumerable<TValue> values) => _forward.Add(query, values);
 
         public void Switch(TKey who, TKey with)
         {
             var whoIndex = _forward.Get(who);
             var withIndex = _forward.Get(with);
 
+            // TODO: добавить асинхронность.
             Remove(who);
             Remove(with);
 
@@ -29,33 +31,36 @@ namespace ElasticKilla.Core.Indexers
             Add(with, whoIndex);
         }
 
-        public void Remove(TKey resource) => _forward.RemoveAll(resource);
+        public void Remove(TKey query) => _forward.RemoveAll(query);
 
-        public void Remove(TKey resource, IEnumerable<TValue> items) => _forward.Remove(resource, items);
+        public void Remove(TKey query, IEnumerable<TValue> values) => _forward.Remove(query, values);
 
-        public void Update(TKey resource, IEnumerable<TValue> items)
+        public void Update(TKey query, IEnumerable<TValue> values)
         {
-            var tokens = items.ToList();
-            var before = _forward.Get(resource);
+            var tokens = values.ToList();
+            var before = _forward.Get(query);
             var after = new HashSet<TValue>(tokens);
 
             after.ExceptWith(before);
             before.ExceptWith(tokens);
 
-            Remove(resource, before);
-            Add(resource, after);
+            // TODO: добавить асинхронность.
+            Remove(query, before);
+            Add(query, after);
         }
 
-        private void OnForwardOnAdded(TKey key, IEnumerable<TValue> items)
+        private void OnForwardOnAdded(TKey query, IEnumerable<TValue> values)
         {
-            foreach (var item in items) 
-                _inverted.Add(item, key);
+            // TODO: добавить асинхронность.
+            foreach (var item in values) 
+                _inverted.Add(item, query);
         }
 
-        private void OnForwardOnRemoved(TKey key, IEnumerable<TValue> items)
+        private void OnForwardOnRemoved(TKey query, IEnumerable<TValue> values)
         {
-            foreach (var item in items)
-                _inverted.Remove(item, key);
+            // TODO: добавить асинхронность.
+            foreach (var item in values)
+                _inverted.Remove(item, query);
         }
 
         public Indexer(IIndex<TKey, TValue> forwardIndex, IIndex<TValue, TKey> invertedIndex)

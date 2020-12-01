@@ -3,27 +3,27 @@ using System.Collections.Generic;
 
 namespace ElasticKilla.Core.Indexes
 {
+    // TODO: добавить асинхронные методы.
     public interface IIndex<TKey, TValue> : IDisposable
     {
-        delegate void IndexedHandler(TKey key, IEnumerable<TValue> items);
+        delegate void IndexedHandler(TKey query, IEnumerable<TValue> values);
 
-        event IndexedHandler Added; 
+        event IndexedHandler Added;
 
         event IndexedHandler Removed;
 
-        bool Contains(TKey key);
+        bool Contains(TKey query);
         
-        ISet<TValue> Get(TKey key);
+        ISet<TValue> Get(TKey query);
 
-        void Add(TKey key, TValue data);
+        void Add(TKey query, TValue value);
 
-        void Add(TKey key, IEnumerable<TValue> items);
-
+        void Add(TKey query, IEnumerable<TValue> values);
         
-        public bool Remove(TKey key, TValue data);
+        public bool Remove(TKey query, TValue value);
 
-        public bool Remove(TKey key, IEnumerable<TValue> items);
+        public bool Remove(TKey query, IEnumerable<TValue> values);
 
-        public bool RemoveAll(TKey key);
+        public bool RemoveAll(TKey query);
     }
 }

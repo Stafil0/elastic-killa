@@ -1,4 +1,5 @@
 ﻿using System;
+using ElasticKilla.Core.Analyzers;
 
 namespace ElasticKilla.CLI
 {
@@ -6,7 +7,6 @@ namespace ElasticKilla.CLI
     {
         static void Main(string[] args)
         {
-            Console.WriteLine("Hello World!");
         }
     }
 }

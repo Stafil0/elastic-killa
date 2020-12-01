@@ -5,7 +5,7 @@ using ElasticKilla.Core.Searchers;
 
 namespace ElasticKilla.Core.Analyzers
 {
-    public abstract class StandardAnalyzer<TKey, TValue> : IDisposable
+    public abstract class BaseAnalyzer<TKey, TValue> : IDisposable
     {
         private bool _disposed = false;
 
@@ -35,12 +35,12 @@ namespace ElasticKilla.Core.Analyzers
 
         #endregion
 
-        protected StandardAnalyzer(
+        protected BaseAnalyzer(
             ISearcher<TKey, TValue> searcher, 
             IIndexer<TValue, TKey> indexer)
         {
-            Indexer = indexer;
             Searcher = searcher;
+            Indexer = indexer;
         }
     }
 }

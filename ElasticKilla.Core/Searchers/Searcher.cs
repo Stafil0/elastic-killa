@@ -10,10 +10,7 @@ namespace ElasticKilla.Core.Searchers
         
         protected readonly IIndex<TKey, TValue> Index;
 
-        public IEnumerable<TValue> Search(TKey key)
-        {
-            return Index.Get(key);
-        }
+        public IEnumerable<TValue> Search(TKey key) => Index.Get(key);
 
         public Searcher(IIndex<TKey, TValue> index)
         {

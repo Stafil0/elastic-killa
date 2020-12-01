@@ -9,7 +9,7 @@ using ElasticKilla.Core.Tokenizer;
 
 namespace ElasticKilla.Core.Analyzers
 {
-    public class FileAnalyzer : StandardAnalyzer<string, string>
+    public class FileAnalyzer : BaseAnalyzer<string, string>
     {
         private const string DefaultFilter = "*.*";
 
@@ -21,11 +21,12 @@ namespace ElasticKilla.Core.Analyzers
 
         private IEnumerable<string> ReadTokens(string path)
         {
+            // TODO: добавить чтение батчами.
             string text;
-            using (var s = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read))
-            using (var tr = new StreamReader(s))
+            using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read))
+            using (var reader = new StreamReader(stream))
             {
-                text = tr.ReadToEnd();
+                text = reader.ReadToEnd();
             }
 
             return _tokenizer.Tokenize(text);
@@ -67,10 +68,10 @@ namespace ElasticKilla.Core.Analyzers
             watcher.Deleted -= OnFileDeleted;
             watcher.Renamed -= OnFileRenamed;
 
+            // TODO: добавить асинхронность.
             var tasks = Directory
                 .EnumerateFiles(watcher.Path)
-                .Select(x => new { File = x, Tokens = ReadTokens(x)})
-                .Select(x => Task.Run(() => Indexer.Remove(x.File, x.Tokens)));
+                .Select(x => Task.Run(() => Indexer.Remove(x)));
 
             await Task.WhenAll(tasks);
             await Task.Yield();
@@ -81,13 +82,15 @@ namespace ElasticKilla.Core.Analyzers
 
         private void OnFileChanged(object source, FileSystemEventArgs e)
         {
-            var tokens = ReadTokens(e.FullPath).ToList();
+            // TODO: добавить чтение батчами.
+            var tokens = ReadTokens(e.FullPath);
             Indexer.Update(e.FullPath, tokens);
         }
 
         private void OnFileCreated(object source, FileSystemEventArgs e)
         {
-            var tokens = ReadTokens(e.FullPath).ToList();
+            // TODO: добавить чтение батчами.
+            var tokens = ReadTokens(e.FullPath);
             Indexer.Add(e.FullPath, tokens);
         }
 
@@ -123,22 +126,21 @@ namespace ElasticKilla.Core.Analyzers
 
         #endregion
 
-        public static FileAnalyzer Create(ITokenizer<string> tokenizer)
+        public FileAnalyzer(ITokenizer<string> tokenizer)
+            : this(
+                tokenizer,
+                new StringIndex<string>(),
+                new StringIndex<string>())
         {
-            var forwardIndexer = new StringIndex<string>();
-            var invertedIndex = new StringIndex<string>();
-
-            var searcher = new Searcher<string, string>(invertedIndex);
-            var indexer = new Indexer<string, string>(forwardIndexer, invertedIndex);
-
-            return new FileAnalyzer(tokenizer, searcher, indexer);
         }
 
-        internal FileAnalyzer(
+        public FileAnalyzer(
             ITokenizer<string> tokenizer,
-            ISearcher<string, string> searcher,
-            IIndexer<string, string> indexer)
-            : base(searcher, indexer)
+            IIndex<string, string> forwardIndex,
+            IIndex<string, string> invertedIndex)
+            : base(
+                new Searcher<string, string>(invertedIndex),
+                new Indexer<string, string>(forwardIndex, invertedIndex))
         {
             _watchers = new Dictionary<string, FileSystemWatcher>();
             _tokenizer = tokenizer;

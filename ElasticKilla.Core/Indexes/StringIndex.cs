@@ -6,7 +6,7 @@ using ElasticKilla.Core.Collections;
 
 namespace ElasticKilla.Core.Indexes
 {
-    internal class StringIndex<T> : IIndex<T, string>
+    public class StringIndex<T> : IIndex<T, string>
     {
         private bool _disposed = false;
 
@@ -14,35 +14,36 @@ namespace ElasticKilla.Core.Indexes
 
         private readonly object _lock = new object();
 
+        // TODO: перенести вызов событий в базовый клас.
         public event IIndex<T, string>.IndexedHandler Added;
 
         public event IIndex<T, string>.IndexedHandler Removed;
 
-        public bool Contains(T key) => _data.ContainsKey(key);
+        public bool Contains(T query) => _data.ContainsKey(query);
 
-        public ISet<string> Get(T key) => _data.TryGetValue(key, out var value)
+        public ISet<string> Get(T query) => _data.TryGetValue(query, out var value)
             ? new HashSet<string>(value)
             : new HashSet<string>();
 
-        public void Add(T key, string data)
+        public void Add(T query, string value)
         {
             _data.AddOrUpdate(
-                key,
-                new ConcurrentSet<string> { data },
+                query,
+                new ConcurrentSet<string> { value },
                 (k, v) =>
                 {
-                    v.Add(data);
+                    v.Add(value);
                     return v;
                 });
 
-            Added?.Invoke(key, new [] { data });
+            Added?.Invoke(query, new [] { value });
         }
 
-        public void Add(T key, IEnumerable<string> items)
+        public void Add(T query, IEnumerable<string> values)
         {
-            var inserting = items.ToList();
+            var inserting = values.ToList();
             _data.AddOrUpdate(
-                key,
+                query,
                 new ConcurrentSet<string>(inserting),
                 (k, v) =>
                 {
@@ -50,24 +51,24 @@ namespace ElasticKilla.Core.Indexes
                     return v;
                 });
 
-            Added?.Invoke(key, inserting);
+            Added?.Invoke(query, inserting);
         }
 
-        public bool Remove(T key, string data) => RemoveFlush(key, set =>
+        public bool Remove(T query, string value) => RemoveFlush(query, set =>
         {
-            set.Remove(data);
+            set.Remove(value);
 
-            Removed?.Invoke(key, new [] { data });
+            Removed?.Invoke(query, new [] { value });
 
             return true;
         });
 
-        public bool Remove(T key, IEnumerable<string> items) => RemoveFlush(key, set =>
+        public bool Remove(T query, IEnumerable<string> values) => RemoveFlush(query, set =>
         {
-            var removed = items.ToList();
+            var removed = values.ToList();
             set.ExceptWith(removed);
 
-            Removed?.Invoke(key, removed);
+            Removed?.Invoke(query, removed);
 
             return true;
         });
@@ -89,7 +90,14 @@ namespace ElasticKilla.Core.Indexes
             return false;
         }
 
-        public bool RemoveAll(T key) => _data.TryRemove(key, out _);
+        public bool RemoveAll(T query)
+        {
+            var removed = _data.TryRemove(query, out var old);
+
+            Removed?.Invoke(query, old);
+
+            return removed;
+        }
 
         public void Flush()
         {

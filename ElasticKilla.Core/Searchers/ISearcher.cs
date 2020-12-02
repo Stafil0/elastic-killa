@@ -5,6 +5,6 @@ namespace ElasticKilla.Core.Searchers
 {
     public interface ISearcher<TKey, TValue>
     {
-        IEnumerable<TValue> Search(TKey key);
+        IEnumerable<TValue> Search(TKey query);
     }
 }

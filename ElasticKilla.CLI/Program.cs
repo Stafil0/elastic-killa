@@ -25,11 +25,11 @@ namespace ElasticKilla.CLI
 
         private static IEnumerable<string> Search(string query) => _analyzer.Search(query);
 
-        private static async Task Subscribe(string path, string pattern) => await _analyzer.Subscribe(path, pattern);
+        private static void Subscribe(string path, string pattern) => _analyzer.Subscribe(path, pattern);
 
-        private static async Task Unsubscribe(string path) => await _analyzer.Unsubscribe(path);
+        private static void Unsubscribe(string path) => _analyzer.Unsubscribe(path);
 
-        private static async Task<bool> ExecuteInput(string input)
+        private static bool ExecuteInput(string input)
         {
             if (input == null)
                 return true;
@@ -45,10 +45,10 @@ namespace ElasticKilla.CLI
                 case Inputs.Subscribe:
                     var path = cmd[1];
                     var pattern = cmd.Length > 2 ? cmd[2] : string.Empty;  
-                    await Subscribe(path, pattern);
+                    Subscribe(path, pattern);
                     break;
                 case Inputs.Unsubscribe:
-                    await Unsubscribe(cmd[1]);
+                    Unsubscribe(cmd[1]);
                     break;
                 case Inputs.Exit:
                     return false;
@@ -57,7 +57,7 @@ namespace ElasticKilla.CLI
             return true;
         }
 
-        public static async Task Main(string[] args)
+        public static void Main(string[] args)
         {
             _analyzer = new FileAnalyzer(new WhitespaceTokenizer());
 
@@ -66,7 +66,7 @@ namespace ElasticKilla.CLI
             {
                 Console.Write(Promt);
                 var input = Console.ReadLine();
-                next = await ExecuteInput(input);
+                next = ExecuteInput(input);
             } while (next);
         }
     }

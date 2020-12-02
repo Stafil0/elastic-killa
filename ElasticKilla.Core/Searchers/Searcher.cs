@@ -1,16 +1,22 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Threading;
 using ElasticKilla.Core.Indexes;
 
 namespace ElasticKilla.Core.Searchers
 {
     internal class Searcher<TKey, TValue> : ISearcher<TKey, TValue>, IDisposable
     {
-        private bool _disposed = false;
+        private bool _disposed;
         
         protected readonly IIndex<TKey, TValue> Index;
 
-        public IEnumerable<TValue> Search(TKey key) => Index.Get(key);
+        public IEnumerable<TValue> Search(TKey query)
+        {
+            Debug.WriteLine($"Searching \"{query}\" in index. Thread = {Thread.CurrentThread.ManagedThreadId}");
+            return Index.Get(query);
+        }
 
         public Searcher(IIndex<TKey, TValue> index)
         {

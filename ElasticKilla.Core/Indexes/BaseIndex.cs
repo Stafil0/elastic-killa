@@ -1,5 +1,7 @@
 ﻿using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
+using System.Threading;
 
 namespace ElasticKilla.Core.Indexes
 {
@@ -15,6 +17,8 @@ namespace ElasticKilla.Core.Indexes
 
         public void Add(TKey query, TValue value)
         {
+            Debug.WriteLine($"Adding \"{value}\" for \"{query}\" query to index. Thread = {Thread.CurrentThread.ManagedThreadId}");
+
             AddIndex(query, value);
             Added?.Invoke(query, new [] { value });
         }
@@ -22,6 +26,8 @@ namespace ElasticKilla.Core.Indexes
 
         public void Add(TKey query, IEnumerable<TValue> values)
         {
+            Debug.WriteLine($"Adding bunch of words for \"{query}\" query to index. Thread = {Thread.CurrentThread.ManagedThreadId}");
+
             var added = values.ToArray();
             AddIndex(query, added);
             Added?.Invoke(query, added);
@@ -30,6 +36,8 @@ namespace ElasticKilla.Core.Indexes
 
         public bool Remove(TKey query, TValue value)
         {
+            Debug.WriteLine($"Removing \"{value}\" for \"{query}\" query to index. Thread = {Thread.CurrentThread.ManagedThreadId}");
+
             var isRemoved = RemoveIndex(query, value);
             Removed?.Invoke(query, new [] { value });
             return isRemoved;
@@ -38,6 +46,8 @@ namespace ElasticKilla.Core.Indexes
         
         public bool Remove(TKey query, IEnumerable<TValue> values)
         {
+            Debug.WriteLine($"Removing bunch of words for \"{query}\" query to index. Thread = {Thread.CurrentThread.ManagedThreadId}");
+            
             var removed = values.ToArray();
             var isRemoved = RemoveIndex(query, removed);
             Removed?.Invoke(query, removed);
@@ -47,6 +57,8 @@ namespace ElasticKilla.Core.Indexes
 
         public bool RemoveAll(TKey query, out IEnumerable<TValue> old)
         {
+            Debug.WriteLine($"Removing whole index for \"{query}\". Thread = {Thread.CurrentThread.ManagedThreadId}");
+
             var isRemoved = RemoveAllIndex(query, out old);
             Removed?.Invoke(query, old);
             return isRemoved;

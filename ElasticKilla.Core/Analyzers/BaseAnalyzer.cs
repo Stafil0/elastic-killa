@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Threading;
 using ElasticKilla.Core.Indexers;
 using ElasticKilla.Core.Searchers;
 
@@ -13,7 +15,11 @@ namespace ElasticKilla.Core.Analyzers
 
         protected readonly IIndexer<TValue, TKey> Indexer;
 
-        public virtual IEnumerable<TValue> Search(TKey query) => Searcher.Search(query);
+        public virtual IEnumerable<TValue> Search(TKey query)
+        {
+            Debug.WriteLine($"Searching for {query} query. Thread = {Thread.CurrentThread.ManagedThreadId}");
+            return Searcher.Search(query);
+        }
 
         #region IDisposable
 

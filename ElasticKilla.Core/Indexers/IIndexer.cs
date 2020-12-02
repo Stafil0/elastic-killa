@@ -4,7 +4,7 @@ using System.Collections.Generic;
 namespace ElasticKilla.Core.Indexers
 {
     // TODO: добавить асинхронность.
-    public interface IIndexer<TKey, TValue> : IDisposable
+    public interface IIndexer<TKey, TValue>
     {
         void Add(TKey query, TValue value);
 

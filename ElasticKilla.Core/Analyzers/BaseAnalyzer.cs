@@ -7,7 +7,7 @@ namespace ElasticKilla.Core.Analyzers
 {
     public abstract class BaseAnalyzer<TKey, TValue> : IDisposable
     {
-        private bool _disposed = false;
+        private bool _disposed;
 
         protected readonly ISearcher<TKey, TValue> Searcher;
 
@@ -26,8 +26,11 @@ namespace ElasticKilla.Core.Analyzers
 
             if (disposing)
             {
-                Indexer?.Dispose();
-                Searcher?.Dispose();
+                if (Indexer is IDisposable indexer)
+                    indexer.Dispose();
+
+                if (Searcher is IDisposable searcher)
+                    searcher.Dispose();
             }
 
             _disposed = true;

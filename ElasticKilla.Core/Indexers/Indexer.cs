@@ -1,14 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Threading.Tasks;
 using ElasticKilla.Core.Indexes;
 
 namespace ElasticKilla.Core.Indexers
 {
-    internal class Indexer<TKey, TValue> : IIndexer<TKey, TValue>
+    internal class Indexer<TKey, TValue> : IIndexer<TKey, TValue>, IDisposable
     {
-        private bool _disposed = false;
+        private bool _disposed;
 
         private readonly IIndex<TKey, TValue> _forward;
 
@@ -23,7 +22,6 @@ namespace ElasticKilla.Core.Indexers
             var whoIndex = _forward.Get(who);
             var withIndex = _forward.Get(with);
 
-            // TODO: добавить асинхронность.
             Remove(who);
             Remove(with);
 
@@ -31,7 +29,7 @@ namespace ElasticKilla.Core.Indexers
             Add(with, whoIndex);
         }
 
-        public void Remove(TKey query) => _forward.RemoveAll(query);
+        public void Remove(TKey query) => _forward.RemoveAll(query, out _);
 
         public void Remove(TKey query, IEnumerable<TValue> values) => _forward.Remove(query, values);
 
@@ -44,22 +42,19 @@ namespace ElasticKilla.Core.Indexers
             after.ExceptWith(before);
             before.ExceptWith(tokens);
 
-            // TODO: добавить асинхронность.
             Remove(query, before);
             Add(query, after);
         }
 
         private void OnForwardOnAdded(TKey query, IEnumerable<TValue> values)
         {
-            // TODO: добавить асинхронность.
-            foreach (var item in values) 
+            foreach (var item in values.AsParallel()) 
                 _inverted.Add(item, query);
         }
 
         private void OnForwardOnRemoved(TKey query, IEnumerable<TValue> values)
         {
-            // TODO: добавить асинхронность.
-            foreach (var item in values)
+            foreach (var item in values.AsParallel())
                 _inverted.Remove(item, query);
         }
 
@@ -84,9 +79,12 @@ namespace ElasticKilla.Core.Indexers
             {
                 _forward.Added -= OnForwardOnAdded;
                 _forward.Removed -= OnForwardOnRemoved;
-                _forward?.Dispose();
 
-                _inverted?.Dispose();
+                if (_forward is IDisposable forward)
+                    forward.Dispose();
+
+                if (_inverted is IDisposable inverted)
+                    inverted.Dispose();
             }
 
             _disposed = true;

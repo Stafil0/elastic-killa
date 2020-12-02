@@ -4,7 +4,7 @@ using ElasticKilla.Core.Indexes;
 
 namespace ElasticKilla.Core.Searchers
 {
-    internal class Searcher<TKey, TValue> : ISearcher<TKey, TValue>
+    internal class Searcher<TKey, TValue> : ISearcher<TKey, TValue>, IDisposable
     {
         private bool _disposed = false;
         
@@ -28,7 +28,8 @@ namespace ElasticKilla.Core.Searchers
 
             if (disposing)
             {
-                Index?.Dispose();
+                if (Index is IDisposable index)
+                    index.Dispose();
             }
             
             _disposed = true;

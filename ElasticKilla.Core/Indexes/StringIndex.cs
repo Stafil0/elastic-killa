@@ -6,26 +6,21 @@ using ElasticKilla.Core.Collections;
 
 namespace ElasticKilla.Core.Indexes
 {
-    public class StringIndex<T> : IIndex<T, string>
+    public class StringIndex<T> : BaseIndex<T, string>, IDisposable
     {
-        private bool _disposed = false;
+        private bool _disposed;
 
         private readonly ConcurrentDictionary<T, ISet<string>> _data;
 
         private readonly object _lock = new object();
 
-        // TODO: перенести вызов событий в базовый клас.
-        public event IIndex<T, string>.IndexedHandler Added;
+        public override bool Contains(T query) => _data.ContainsKey(query);
 
-        public event IIndex<T, string>.IndexedHandler Removed;
-
-        public bool Contains(T query) => _data.ContainsKey(query);
-
-        public ISet<string> Get(T query) => _data.TryGetValue(query, out var value)
+        public override ISet<string> Get(T query) => _data.TryGetValue(query, out var value)
             ? new HashSet<string>(value)
             : new HashSet<string>();
 
-        public void Add(T query, string value)
+        protected override void AddIndex(T query, string value)
         {
             _data.AddOrUpdate(
                 query,
@@ -35,11 +30,9 @@ namespace ElasticKilla.Core.Indexes
                     v.Add(value);
                     return v;
                 });
-
-            Added?.Invoke(query, new [] { value });
         }
 
-        public void Add(T query, IEnumerable<string> values)
+        protected override void AddIndex(T query, IEnumerable<string> values)
         {
             var inserting = values.ToList();
             _data.AddOrUpdate(
@@ -50,26 +43,13 @@ namespace ElasticKilla.Core.Indexes
                     v.UnionWith(inserting);
                     return v;
                 });
-
-            Added?.Invoke(query, inserting);
         }
 
-        public bool Remove(T query, string value) => RemoveFlush(query, set =>
+        protected override bool RemoveIndex(T query, string value) => RemoveFlush(query, set => set.Remove(value));
+
+        protected override bool RemoveIndex(T query, IEnumerable<string> values) => RemoveFlush(query, set =>
         {
-            set.Remove(value);
-
-            Removed?.Invoke(query, new [] { value });
-
-            return true;
-        });
-
-        public bool Remove(T query, IEnumerable<string> values) => RemoveFlush(query, set =>
-        {
-            var removed = values.ToList();
-            set.ExceptWith(removed);
-
-            Removed?.Invoke(query, removed);
-
+            set.ExceptWith(values);
             return true;
         });
 
@@ -81,7 +61,7 @@ namespace ElasticKilla.Core.Indexes
                 lock (_lock)
                 {
                     if (!value.Any())
-                        RemoveAll(key);
+                        _data.TryRemove(key, out value);
                 }
 
                 return result;
@@ -90,13 +70,12 @@ namespace ElasticKilla.Core.Indexes
             return false;
         }
 
-        public bool RemoveAll(T query)
+        protected override bool RemoveAllIndex(T query, out IEnumerable<string> old)
         {
-            var removed = _data.TryRemove(query, out var old);
+            var isRemoved = _data.TryRemove(query, out var removed);
+            old = removed;
 
-            Removed?.Invoke(query, old);
-
-            return removed;
+            return isRemoved;
         }
 
         public void Flush()
@@ -105,7 +84,7 @@ namespace ElasticKilla.Core.Indexes
                 value.Clear();
             _data.Clear();
         }
-        
+
         #region IDisposable
 
         public void Dispose() => Dispose(true);

@@ -1,10 +1,8 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 
 namespace ElasticKilla.Core.Indexes
 {
-    // TODO: добавить асинхронные методы.
-    public interface IIndex<TKey, TValue> : IDisposable
+    public interface IIndex<TKey, TValue>
     {
         delegate void IndexedHandler(TKey query, IEnumerable<TValue> values);
 
@@ -19,11 +17,11 @@ namespace ElasticKilla.Core.Indexes
         void Add(TKey query, TValue value);
 
         void Add(TKey query, IEnumerable<TValue> values);
-        
+
         public bool Remove(TKey query, TValue value);
 
         public bool Remove(TKey query, IEnumerable<TValue> values);
 
-        public bool RemoveAll(TKey query);
+        public bool RemoveAll(TKey query, out IEnumerable<TValue> old);
     }
 }

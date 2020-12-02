@@ -2,6 +2,7 @@
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using ElasticKilla.Core.Collections;
 using ElasticKilla.Core.Indexers;
 using ElasticKilla.Core.Indexes;
 using ElasticKilla.Core.Searchers;
@@ -13,11 +14,13 @@ namespace ElasticKilla.Core.Analyzers
     {
         private const string DefaultFilter = "*.*";
 
-        private bool _disposed = false;
-
         private readonly Dictionary<string, FileSystemWatcher> _watchers;
 
         private readonly ITokenizer<string> _tokenizer;
+
+        private readonly BackgroundQueue _backgroundQueue;
+
+        private bool _disposed;
 
         private ISet<string> ReadTokens(string path)
         {
@@ -62,8 +65,8 @@ namespace ElasticKilla.Core.Analyzers
 
             var tasks = Directory
                 .EnumerateFiles(path, filter)
-                .Select(x => new { File = x, Tokens = ReadTokens(x) })
-                .Select(x => Task.Run(() => Indexer.Add(x.File, x.Tokens)));
+                .Select(x => new {File = x, Tokens = ReadTokens(x)})
+                .Select(x => _backgroundQueue.QueueTask(() => Indexer.Add(x.File, x.Tokens)));
 
             await Task.WhenAll(tasks);
             await Task.Yield();
@@ -80,10 +83,9 @@ namespace ElasticKilla.Core.Analyzers
             watcher.Deleted -= OnFileDeleted;
             watcher.Renamed -= OnFileRenamed;
 
-            // TODO: добавить асинхронность.
             var tasks = Directory
                 .EnumerateFiles(watcher.Path, watcher.Filter)
-                .Select(x => Task.Run(() => Indexer.Remove(x)));
+                .Select(x => _backgroundQueue.QueueTask(() => Indexer.Remove(x)));
 
             await Task.WhenAll(tasks);
             await Task.Yield();
@@ -94,24 +96,30 @@ namespace ElasticKilla.Core.Analyzers
 
         private void OnFileChanged(object source, FileSystemEventArgs e)
         {
-            var tokens = ReadTokens(e.FullPath);
-            Indexer.Update(e.FullPath, tokens);
+            _backgroundQueue.QueueTask(() =>
+            {
+                var tokens = ReadTokens(e.FullPath);
+                Indexer.Update(e.FullPath, tokens);
+            });
         }
 
         private void OnFileCreated(object source, FileSystemEventArgs e)
         {
-            var tokens = ReadTokens(e.FullPath);
-            Indexer.Add(e.FullPath, tokens);
+            _backgroundQueue.QueueTask(() =>
+            {
+                var tokens = ReadTokens(e.FullPath);
+                Indexer.Add(e.FullPath, tokens);
+            });
         }
 
         private void OnFileDeleted(object source, FileSystemEventArgs e)
         {
-            Indexer.Remove(e.FullPath);
+            _backgroundQueue.QueueTask(() => Indexer.Remove(e.FullPath));
         }
 
         private void OnFileRenamed(object source, RenamedEventArgs e)
         {
-            Indexer.Switch(e.OldFullPath, e.FullPath);
+            _backgroundQueue.QueueTask(() => Indexer.Switch(e.OldFullPath, e.FullPath));
         }
 
         #endregion
@@ -152,8 +160,9 @@ namespace ElasticKilla.Core.Analyzers
                 new Searcher<string, string>(invertedIndex),
                 new Indexer<string, string>(forwardIndex, invertedIndex))
         {
-            _watchers = new Dictionary<string, FileSystemWatcher>();
             _tokenizer = tokenizer;
+            _watchers = new Dictionary<string, FileSystemWatcher>();
+            _backgroundQueue = new BackgroundQueue();
         }
     }
 }

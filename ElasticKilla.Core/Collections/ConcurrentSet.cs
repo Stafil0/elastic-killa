@@ -31,10 +31,7 @@ namespace ElasticKilla.Core.Collections
 
         public bool TryRemove(T item) => _data.TryRemove(item, out _);
 
-        public void Clear()
-        {
-            _data.Clear();
-        }
+        public void Clear() => _data.Clear();
 
         public void UnionWith(IEnumerable<T> other)
         {
@@ -51,7 +48,7 @@ namespace ElasticKilla.Core.Collections
                     TryRemove(item);
             }
         }
-        
+
         public void ExceptWith(IEnumerable<T> other)
         {
             foreach (var item in other)
@@ -77,7 +74,7 @@ namespace ElasticKilla.Core.Collections
         public bool IsProperSupersetOf(IEnumerable<T> other)
         {
             var enumerable = other as IList<T> ?? other.ToArray();
-            return this.Count != enumerable.Count && IsSupersetOf(enumerable);
+            return Count != enumerable.Count && IsSupersetOf(enumerable);
         }
 
         public bool IsProperSubsetOf(IEnumerable<T> other)

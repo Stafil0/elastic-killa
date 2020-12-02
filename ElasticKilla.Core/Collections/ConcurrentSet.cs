@@ -6,7 +6,7 @@ using System.Linq;
 
 namespace ElasticKilla.Core.Collections
 {
-    public class ConcurrentSet<T> : ISet<T>
+    internal class ConcurrentSet<T> : ISet<T>
     {
         private readonly ConcurrentDictionary<T, byte> _data;
 

@@ -3,7 +3,7 @@ using System.Threading.Tasks;
 
 namespace ElasticKilla.Core.Collections
 {
-    public class BackgroundQueue
+    internal class BackgroundQueue
     {
         private Task _last = Task.FromResult(true);
         private readonly object _lock = new object();

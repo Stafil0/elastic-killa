@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Threading.Tasks;
 using ElasticKilla.Core.Analyzers;
 using ElasticKilla.Core.Tokenizer;
 
@@ -29,7 +28,7 @@ namespace ElasticKilla.CLI
 
         private static void Unsubscribe(string path) => _analyzer.Unsubscribe(path);
 
-        private static bool ExecuteInput(string input)
+        private static bool ProcessInput(string input)
         {
             if (input == null)
                 return true;
@@ -66,7 +65,7 @@ namespace ElasticKilla.CLI
             {
                 Console.Write(Promt);
                 var input = Console.ReadLine();
-                next = ExecuteInput(input);
+                next = ProcessInput(input);
             } while (next);
         }
     }

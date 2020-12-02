@@ -44,7 +44,7 @@ namespace ElasticKilla.CLI
                     break;
                 case Inputs.Subscribe:
                     var path = cmd[1];
-                    var pattern = cmd.Length > 2 ? cmd[2] : string.Empty;  
+                    var pattern = cmd.Length > 2 ? cmd[2] : string.Empty;
                     Subscribe(path, pattern);
                     break;
                 case Inputs.Unsubscribe:

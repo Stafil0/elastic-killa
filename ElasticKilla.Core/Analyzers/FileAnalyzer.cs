@@ -14,7 +14,7 @@ namespace ElasticKilla.Core.Analyzers
 {
     public class FileAnalyzer : BaseAnalyzer<string, string>
     {
-        private const string DefaultFilter = "*.*";
+        private const string DefaultFilePattern = "*.*";
 
         private readonly Dictionary<string, FileSystemWatcher> _watchers;
 
@@ -46,7 +46,7 @@ namespace ElasticKilla.Core.Analyzers
 
         #region FileSystemWatcher
 
-        public async Task Subscribe(string path, string filter = null)
+        public async Task Subscribe(string path, string pattern = null)
         {
             if (_watchers.ContainsKey(path) || !File.Exists(path) && !Directory.Exists(path))
             {
@@ -54,7 +54,7 @@ namespace ElasticKilla.Core.Analyzers
                 return;
             }
 
-            var fileFilter = string.IsNullOrWhiteSpace(filter) ? DefaultFilter : filter;
+            var fileFilter = string.IsNullOrWhiteSpace(pattern) ? DefaultFilePattern : pattern;
             var watcher = new FileSystemWatcher(path, fileFilter)
             {
                 NotifyFilter = NotifyFilters.LastWrite |
@@ -73,7 +73,7 @@ namespace ElasticKilla.Core.Analyzers
             Debug.WriteLine($"Subscribed to \"{path}\". Thread = {Thread.CurrentThread.ManagedThreadId}");
             
             var tasks = Directory
-                .EnumerateFiles(path, filter)
+                .EnumerateFiles(path, pattern)
                 .Select(x => new {File = x, Tokens = ParseTokens(x)})
                 .Select(x => _backgroundQueue.QueueTask(() =>
                 {

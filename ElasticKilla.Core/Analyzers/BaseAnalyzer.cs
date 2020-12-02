@@ -17,7 +17,7 @@ namespace ElasticKilla.Core.Analyzers
 
         public virtual IEnumerable<TValue> Search(TKey query)
         {
-            Debug.WriteLine($"Searching for {query} query. Thread = {Thread.CurrentThread.ManagedThreadId}");
+            Debug.WriteLine($"Searching for \"{query}\" query. Thread = {Thread.CurrentThread.ManagedThreadId}");
             return Searcher.Search(query);
         }
 

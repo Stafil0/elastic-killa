@@ -4,6 +4,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ElasticKilla.Core", "Elasti
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ElasticKilla.CLI", "ElasticKilla.CLI\ElasticKilla.CLI.csproj", "{B260E177-8715-4392-B422-907A246470A4}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ElasticKilla.Tests", "ElasticKilla.Tests\ElasticKilla.Tests.csproj", "{D9E3BBED-D39D-4F91-B0D3-4525F59C4A4E}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -18,5 +20,9 @@ Global
 		{B260E177-8715-4392-B422-907A246470A4}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{B260E177-8715-4392-B422-907A246470A4}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{B260E177-8715-4392-B422-907A246470A4}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D9E3BBED-D39D-4F91-B0D3-4525F59C4A4E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D9E3BBED-D39D-4F91-B0D3-4525F59C4A4E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D9E3BBED-D39D-4F91-B0D3-4525F59C4A4E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D9E3BBED-D39D-4F91-B0D3-4525F59C4A4E}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

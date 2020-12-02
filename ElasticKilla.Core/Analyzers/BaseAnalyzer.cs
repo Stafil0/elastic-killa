@@ -13,7 +13,7 @@ namespace ElasticKilla.Core.Analyzers
 
         protected readonly IIndexer<TValue, TKey> Indexer;
 
-        public virtual IEnumerable<TValue> Search(TKey key) => Searcher.Search(key);
+        public virtual IEnumerable<TValue> Search(TKey query) => Searcher.Search(query);
 
         #region IDisposable
 

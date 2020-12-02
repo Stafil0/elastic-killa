@@ -19,22 +19,26 @@ namespace ElasticKilla.Core.Analyzers
 
         private readonly ITokenizer<string> _tokenizer;
 
-        private IEnumerable<string> ReadTokens(string path)
+        private ISet<string> ReadTokens(string path)
         {
-            // TODO: добавить чтение батчами.
-            string text;
+            var set = new HashSet<string>();
             using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read))
             using (var reader = new StreamReader(stream))
             {
-                text = reader.ReadToEnd();
+                string text;
+                while ((text = reader.ReadLine()) != null)
+                {
+                    var tokens = _tokenizer.Tokenize(text);
+                    set.UnionWith(tokens);
+                }
             }
 
-            return _tokenizer.Tokenize(text);
+            return set;
         }
 
         #region FileSystemWatcher
 
-        public void Subscribe(string path, string filter = null)
+        public async Task Subscribe(string path, string filter = null)
         {
             if (_watchers.ContainsKey(path) || !File.Exists(path) && !Directory.Exists(path))
                 return;
@@ -55,6 +59,14 @@ namespace ElasticKilla.Core.Analyzers
             watcher.EnableRaisingEvents = true;
 
             _watchers[path] = watcher;
+
+            var tasks = Directory
+                .EnumerateFiles(path, filter)
+                .Select(x => new { File = x, Tokens = ReadTokens(x) })
+                .Select(x => Task.Run(() => Indexer.Add(x.File, x.Tokens)));
+
+            await Task.WhenAll(tasks);
+            await Task.Yield();
         }
 
         public async Task Unsubscribe(string path)
@@ -70,7 +82,7 @@ namespace ElasticKilla.Core.Analyzers
 
             // TODO: добавить асинхронность.
             var tasks = Directory
-                .EnumerateFiles(watcher.Path)
+                .EnumerateFiles(watcher.Path, watcher.Filter)
                 .Select(x => Task.Run(() => Indexer.Remove(x)));
 
             await Task.WhenAll(tasks);
@@ -82,14 +94,12 @@ namespace ElasticKilla.Core.Analyzers
 
         private void OnFileChanged(object source, FileSystemEventArgs e)
         {
-            // TODO: добавить чтение батчами.
             var tokens = ReadTokens(e.FullPath);
             Indexer.Update(e.FullPath, tokens);
         }
 
         private void OnFileCreated(object source, FileSystemEventArgs e)
         {
-            // TODO: добавить чтение батчами.
             var tokens = ReadTokens(e.FullPath);
             Indexer.Add(e.FullPath, tokens);
         }

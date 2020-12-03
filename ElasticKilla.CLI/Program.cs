@@ -24,6 +24,8 @@ namespace ElasticKilla.CLI
 
         private static IEnumerable<string> Search(string query) => _analyzer.Search(query);
 
+        private static IEnumerable<string> DelayedSearch(string query) => _analyzer.DelayedSearch(query).Result;
+
         private static void Subscribe(string path, string pattern) => _analyzer.Subscribe(path, pattern);
 
         private static void Unsubscribe(string path) => _analyzer.Unsubscribe(path);

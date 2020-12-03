@@ -26,8 +26,14 @@ namespace ElasticKilla.Core.Indexes
 
         public void Add(TKey query, IEnumerable<TValue> values)
         {
-            Debug.WriteLine($"Adding bunch of words for \"{query}\" query to index. Thread = {Thread.CurrentThread.ManagedThreadId}");
             var added = values.ToArray();
+            if (!added.Any())
+            {
+                Debug.WriteLine($"Empty add request for \"{query}\" query, skipping. Thread = {Thread.CurrentThread.ManagedThreadId}");
+                return;
+            }
+
+            Debug.WriteLine($"Adding bunch of words for \"{query}\" query to index. Thread = {Thread.CurrentThread.ManagedThreadId}");
 
             AddIndex(query, added);
             Added?.Invoke(query, added);
@@ -48,9 +54,15 @@ namespace ElasticKilla.Core.Indexes
         
         public bool Remove(TKey query, IEnumerable<TValue> values)
         {
-            Debug.WriteLine($"Removing bunch of words for \"{query}\" query to index. Thread = {Thread.CurrentThread.ManagedThreadId}");
-            
             var removed = values.ToArray();
+            if (!removed.Any())
+            {
+                Debug.WriteLine($"Empty remove request for \"{query}\" query, skipping. Thread = {Thread.CurrentThread.ManagedThreadId}");
+                return false;
+            }
+
+            Debug.WriteLine($"Removing bunch of words for \"{query}\" query to index. Thread = {Thread.CurrentThread.ManagedThreadId}");
+
             var isRemoved = RemoveIndex(query, removed);
             if (isRemoved)
                 Removed?.Invoke(query, removed);

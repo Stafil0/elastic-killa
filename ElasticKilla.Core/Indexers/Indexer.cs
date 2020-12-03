@@ -23,6 +23,9 @@ namespace ElasticKilla.Core.Indexers
 
         public void Add(TKey query, IEnumerable<TValue> values)
         {
+            if (values == null)
+                return;
+
             Debug.WriteLine($"Adding bunch of words for \"{query}\" query to forward index. Thread = {Thread.CurrentThread.ManagedThreadId}");
             _forward.Add(query, values);
         }
@@ -51,13 +54,20 @@ namespace ElasticKilla.Core.Indexers
 
         public void Remove(TKey query, IEnumerable<TValue> values)
         {
+            if (values == null)
+                return;
+
             Debug.WriteLine($"Removing bunch of words from forward index for \"{query}\" query. Thread = {Thread.CurrentThread.ManagedThreadId}");
             _forward.Remove(query, values);
         }
 
         public void Update(TKey query, IEnumerable<TValue> values)
         {
+            if (values == null)
+                return;
+
             Debug.WriteLine($"Updating forward index for \"{query}\". Thread = {Thread.CurrentThread.ManagedThreadId}");
+
             var tokens = values.ToList();
             var before = _forward.Get(query);
             var after = new HashSet<TValue>(tokens);
@@ -72,6 +82,9 @@ namespace ElasticKilla.Core.Indexers
 
         private void OnForwardAdded(TKey query, IEnumerable<TValue> values)
         {
+            if (values == null)
+                return;
+
             foreach (var item in values.AsParallel())
             {
                 Debug.WriteLine($"Adding \"{item}\" for \"{query}\" query to inverted index. Thread = {Thread.CurrentThread.ManagedThreadId}");
@@ -81,6 +94,9 @@ namespace ElasticKilla.Core.Indexers
 
         private void OnForwardRemoved(TKey query, IEnumerable<TValue> values)
         {
+            if (values == null)
+                return;
+
             foreach (var item in values.AsParallel())
             {
                 Debug.WriteLine($"Removing \"{item}\" for \"{query}\" query from inverted index. Thread = {Thread.CurrentThread.ManagedThreadId}");

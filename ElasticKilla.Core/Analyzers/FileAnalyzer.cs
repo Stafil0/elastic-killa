@@ -1,4 +1,5 @@
-﻿using System.Collections.Concurrent;
+﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -6,6 +7,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using ElasticKilla.Core.Collections;
+using ElasticKilla.Core.Extensions;
 using ElasticKilla.Core.Indexers;
 using ElasticKilla.Core.Indexes;
 using ElasticKilla.Core.Lockers;
@@ -18,7 +20,9 @@ namespace ElasticKilla.Core.Analyzers
     {
         private const string DefaultFilePattern = "*";
 
-        private readonly ReaderWriterLockSlim _lock = new ReaderWriterLockSlim();
+        private readonly ReaderWriterLockSlim _queueLock = new ReaderWriterLockSlim(LockRecursionPolicy.SupportsRecursion);
+
+        private readonly ReaderWriterLockSlim _subscriptionLock = new ReaderWriterLockSlim(LockRecursionPolicy.SupportsRecursion);
 
         private readonly Dictionary<string, FileSystemWatcher> _watchers;
 
@@ -32,11 +36,28 @@ namespace ElasticKilla.Core.Analyzers
         {
             get
             {
-                using (new ReadLockCookie(_lock))
+                using (new ReadLockCookie(_subscriptionLock))
                 {
-                    return _watchers.Values.Select(x => Path.Join(x.Path, string.Join('|', x.Filters))).ToList();
+                    var result = _watchers.Values.Select(x => Path.Join(x.Path, string.Join('|', x.Filters))).ToList(); 
+                    
+                    Debug.WriteLine($"Subscribed to {result.Count} folders. Thread = {Thread.CurrentThread.ManagedThreadId}");
+                    
+                    return result;
                 }
             }
+        }
+
+        public bool IsIndexing => !_backgroundQueue.IsEmpty;
+
+        public Task<IEnumerable<string>> DelayedSearch(string query)
+        {
+            return Task.Run(() =>
+            {
+                using (_backgroundQueue.Pause())
+                {
+                    return base.Search(query);
+                }
+            });
         }
 
         private ISet<string> ParseTokens(string path)
@@ -44,15 +65,22 @@ namespace ElasticKilla.Core.Analyzers
             Debug.WriteLine($"Parsing tokens from \"{path}\". Thread = {Thread.CurrentThread.ManagedThreadId}");
 
             var set = new HashSet<string>();
-            using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read))
-            using (var reader = new StreamReader(stream))
+            try
             {
-                string text;
-                while ((text = reader.ReadLine()) != null)
+                using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read))
+                using (var reader = new StreamReader(stream))
                 {
-                    var tokens = _tokenizer.Tokenize(text);
-                    set.UnionWith(tokens);
+                    string text;
+                    while ((text = reader.ReadLine()) != null)
+                    {
+                        var tokens = _tokenizer.Tokenize(text);
+                        set.UnionWith(tokens);
+                    }
                 }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Can't access to \"{path}\": {ex.Message}. Thread = {Thread.CurrentThread.ManagedThreadId}");
             }
 
             Debug.WriteLine($"Parsed {set.Count} tokens from \"{path}\". Thread = {Thread.CurrentThread.ManagedThreadId}");
@@ -63,43 +91,49 @@ namespace ElasticKilla.Core.Analyzers
 
         public async Task Subscribe(string path, string pattern = null)
         {
-            if (!File.Exists(path) && !Directory.Exists(path))
+            if (!Directory.Exists(path))
             {
-                Debug.WriteLine($"Already subscribed to \"{path}\" or path not exists. Thread = {Thread.CurrentThread.ManagedThreadId}");
+                Debug.WriteLine($"Directory \"{path}\" not exists. Thread = {Thread.CurrentThread.ManagedThreadId}");
                 return;
             }
 
-            string filter;
-            using (new UpgradeableReadLockCookie(_lock))
+            var filter = string.IsNullOrWhiteSpace(pattern) ? DefaultFilePattern : pattern;
+            using (new UpgradeableReadLockCookie(_subscriptionLock))
             {
                 if (!_watchers.TryGetValue(path, out var watcher))
                 {
-                    using (new WriteLockCookie(_lock))
+                    using (new WriteLockCookie(_subscriptionLock))
                     {
-                        watcher = new FileSystemWatcher(path);
+                        watcher = new FileSystemWatcher(path, filter);
                         _watchers[path] = watcher;
                         SubscribeWatcher(watcher);
                     }
                 }
+                else
+                {
+                    if (watcher.Filters.Contains(filter))
+                        return;
 
-                filter = string.IsNullOrWhiteSpace(pattern) ? DefaultFilePattern : pattern;
-                if (watcher.Filters.Contains(filter))
-                    return;
-
-                using (new WriteLockCookie(_lock))
-                    watcher.Filters.Add(filter);
+                    using (new WriteLockCookie(_subscriptionLock))
+                        watcher.Filters.Add(filter);
+                }
             }
 
-            var tasks = Directory
-                .EnumerateFiles(path, filter)
-                .Select(x => new {File = x, Tokens = ParseTokens(x)})
-                .Select(x => _backgroundQueue.QueueTask(() =>
-                {
-                    Debug.WriteLine($"Start indexing \"{x.File}\". Thread = {Thread.CurrentThread.ManagedThreadId}");
-                    Indexer.Add(x.File, x.Tokens);
-                }));
+            var tasks = new List<Task>();
+            using (new WriteLockCookie(_queueLock))
+            {
+                tasks.AddRange(DirectoryExtensions
+                    .GetFilesSafe(path, filter)
+                    .Select(x => _backgroundQueue.QueueTask(() =>
+                    {
+                        var tokens = ParseTokens(x);
 
-            await Task.WhenAll(tasks);
+                        Debug.WriteLine($"Start indexing \"{x}\". Thread = {Thread.CurrentThread.ManagedThreadId}");
+                        Indexer.Add(x, tokens);
+                    }, x)));
+            }
+
+            await Task.WhenAll(tasks).IgnoreExceptions();
             await Task.Yield();
         }
 
@@ -119,7 +153,7 @@ namespace ElasticKilla.Core.Analyzers
         public async Task Unsubscribe(string path, string pattern = null)
         {
             string filter;
-            using (new UpgradeableReadLockCookie(_lock))
+            using (new UpgradeableReadLockCookie(_subscriptionLock))
             {
                 if (!_watchers.TryGetValue(path, out var watcher))
                 {
@@ -131,7 +165,7 @@ namespace ElasticKilla.Core.Analyzers
                     ? DefaultFilePattern
                     : watcher.Filters.FirstOrDefault(x => x.Equals(pattern));
 
-                using (new WriteLockCookie(_lock))
+                using (new WriteLockCookie(_subscriptionLock))
                 {
                     watcher.Filters.Remove(pattern);
                     if (string.IsNullOrWhiteSpace(pattern) || !watcher.Filters.Any())
@@ -144,15 +178,23 @@ namespace ElasticKilla.Core.Analyzers
 
             if (!string.IsNullOrWhiteSpace(filter))
             {
-                var tasks = Directory
-                    .EnumerateFiles(path, filter)
-                    .Select(x => _backgroundQueue.QueueTask(() =>
-                    {
-                        Debug.WriteLine($"Removing index for \"{x}\". Thread = {Thread.CurrentThread.ManagedThreadId}");
-                        Indexer.Remove(x);
-                    }));
+                var tasks = new List<Task>();
+                using (new WriteLockCookie(_queueLock))
+                {
+                    tasks.AddRange(DirectoryExtensions
+                        .GetFilesSafe(path, filter)
+                        .Select(x =>
+                        {
+                            _backgroundQueue.CancelTasks(x);
+                            return _backgroundQueue.QueueTask(() =>
+                            {
+                                Debug.WriteLine($"Removing index for \"{x}\". Thread = {Thread.CurrentThread.ManagedThreadId}");
+                                Indexer.Remove(x);
+                            });
+                        }));
+                }
 
-                await Task.WhenAll(tasks);
+                await Task.WhenAll(tasks).IgnoreExceptions();
                 await Task.Yield();
             }
         }
@@ -171,59 +213,78 @@ namespace ElasticKilla.Core.Analyzers
 
         private void OnFileChanged(object source, FileSystemEventArgs e)
         {
-            _backgroundQueue.QueueTask(() =>
+            using (new WriteLockCookie(_queueLock))
             {
-                Debug.WriteLine($"\"{e.FullPath}\" changed, reindexing. Thread = {Thread.CurrentThread.ManagedThreadId}");
+                _backgroundQueue.QueueTask(() =>
+                {
+                    var tokens = ParseTokens(e.FullPath);
 
-                var tokens = ParseTokens(e.FullPath);
-                Indexer.Update(e.FullPath, tokens);
-            });
+                    Debug.WriteLine($"\"{e.FullPath}\" changed, reindexing. Thread = {Thread.CurrentThread.ManagedThreadId}");
+                    Indexer.Update(e.FullPath, tokens);
+                }, e.FullPath);
+            }
         }
 
         private void OnFileCreated(object source, FileSystemEventArgs e)
         {
-            _backgroundQueue.QueueTask(() =>
+            using (new WriteLockCookie(_queueLock))
             {
-                Debug.WriteLine($"\"{e.FullPath}\" created, indexing. Thread = {Thread.CurrentThread.ManagedThreadId}");
+                _backgroundQueue.QueueTask(() =>
+                {
+                    var tokens = ParseTokens(e.FullPath);
 
-                var tokens = ParseTokens(e.FullPath);
-                Indexer.Add(e.FullPath, tokens);
-            });
+                    Debug.WriteLine($"\"{e.FullPath}\" created, indexing. Thread = {Thread.CurrentThread.ManagedThreadId}");
+                    Indexer.Add(e.FullPath, tokens);
+                }, e.FullPath);
+            }
         }
 
         private void OnFileDeleted(object source, FileSystemEventArgs e)
         {
-            _backgroundQueue.QueueTask(() =>
+            using (new WriteLockCookie(_queueLock))
             {
-                Debug.WriteLine($"\"{e.FullPath}\" removed, clearing index. Thread = {Thread.CurrentThread.ManagedThreadId}");
-                Indexer.Remove(e.FullPath);
-            });
+                _backgroundQueue.CancelTasks(e.FullPath);
+                _backgroundQueue.QueueTask(() =>
+                {
+                    Debug.WriteLine($"\"{e.FullPath}\" removed, clearing index. Thread = {Thread.CurrentThread.ManagedThreadId}");
+                    Indexer.Remove(e.FullPath);
+                });
+            }
 
             // Если подписались на конкретный файл.
-            if (source is FileSystemWatcher watcher && watcher.Filters.Contains(e.Name))
+            using (new UpgradeableReadLockCookie(_subscriptionLock))
             {
-                using (new WriteLockCookie(_lock))
+                if (source is FileSystemWatcher watcher && watcher.Filters.Contains(e.Name))
                 {
-                    watcher.Filters.Remove(e.Name);
+                    using (new WriteLockCookie(_subscriptionLock))
+                    {
+                        watcher.Filters.Remove(e.Name);
+                    }
                 }
             }
         }
 
         private void OnFileRenamed(object source, RenamedEventArgs e)
         {
-            _backgroundQueue.QueueTask(() =>
+            using (new WriteLockCookie(_queueLock))
             {
-                Debug.WriteLine($"\"{e.OldFullPath}\" renamed to \"{e.FullPath}\", reindexing. Thread = {Thread.CurrentThread.ManagedThreadId}");
-                Indexer.Switch(e.OldFullPath, e.FullPath);
-            });
+                _backgroundQueue.QueueTask(() =>
+                {
+                    Debug.WriteLine($"\"{e.OldFullPath}\" renamed to \"{e.FullPath}\", reindexing. Thread = {Thread.CurrentThread.ManagedThreadId}");
+                    Indexer.Switch(e.OldFullPath, e.FullPath);
+                });
+            }
 
             // Если подписались на конкретный файл.
-            if (source is FileSystemWatcher watcher && watcher.Filters.Contains(e.OldName))
+            using (new UpgradeableReadLockCookie(_subscriptionLock))
             {
-                using (new WriteLockCookie(_lock))
+                if (source is FileSystemWatcher watcher && watcher.Filters.Contains(e.OldName))
                 {
-                    watcher.Filters.Remove(e.OldName);
-                    watcher.Filters.Add(e.Name);
+                    using (new WriteLockCookie(_subscriptionLock))
+                    {
+                        watcher.Filters.Remove(e.OldName);
+                        watcher.Filters.Add(e.Name);
+                    }
                 }
             }
         }
@@ -239,8 +300,11 @@ namespace ElasticKilla.Core.Analyzers
 
             if (disposing)
             {
+                _queueLock?.Dispose();
+                _subscriptionLock?.Dispose();
+                _backgroundQueue?.Dispose();
                 foreach (var (_, watcher) in _watchers)
-                    watcher.Dispose();
+                    UnsubscribeWatcher(watcher);
             }
 
             _disposed = true;

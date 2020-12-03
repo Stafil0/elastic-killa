@@ -11,11 +11,10 @@ namespace ElasticKilla.Core.Lockers
         {
             (_lock = rwl)?.EnterReadLock();
         }
-        
+
         public void Dispose()
         {
-            if (_lock != null && _lock.IsReadLockHeld)
-                _lock?.ExitReadLock();
+            _lock?.ExitReadLock();
         }
     }
 }

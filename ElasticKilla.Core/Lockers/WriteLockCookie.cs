@@ -14,8 +14,7 @@ namespace ElasticKilla.Core.Lockers
         
         public void Dispose()
         {
-            if (_lock != null && _lock.IsWriteLockHeld)
-                _lock?.ExitWriteLock();
+            _lock?.ExitWriteLock();
         }
     }
 }

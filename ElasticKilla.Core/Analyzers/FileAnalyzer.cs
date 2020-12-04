@@ -104,9 +104,9 @@ namespace ElasticKilla.Core.Analyzers
                 {
                     using (new WriteLockCookie(_subscriptionLock))
                     {
-                        watcher = new FileSystemWatcher(path, filter);
-                        _watchers[path] = watcher;
-                        SubscribeWatcher(watcher);
+                        if (TryGetAndSubscribeWatcher(path, filter, out watcher))
+                            _watchers[path] = watcher;
+                        else return;
                     }
                 }
                 else
@@ -137,17 +137,30 @@ namespace ElasticKilla.Core.Analyzers
             await Task.Yield();
         }
 
-        private void SubscribeWatcher(FileSystemWatcher watcher)
+        private bool TryGetAndSubscribeWatcher(string path, string filter, out FileSystemWatcher watcher)
         {
-            watcher.NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.DirectoryName;
-            watcher.IncludeSubdirectories = false;
-            watcher.Changed += OnFileChanged;
-            watcher.Created += OnFileCreated;
-            watcher.Deleted += OnFileDeleted;
-            watcher.Renamed += OnFileRenamed;
-            watcher.EnableRaisingEvents = true;
+            watcher = default;
+            bool subscribed;
+            try
+            {
+                watcher = new FileSystemWatcher(path, filter);
+                watcher.NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.DirectoryName;
+                watcher.IncludeSubdirectories = false;
+                watcher.EnableRaisingEvents = true;
+                watcher.Changed += OnFileChanged;
+                watcher.Created += OnFileCreated;
+                watcher.Deleted += OnFileDeleted;
+                watcher.Renamed += OnFileRenamed;
+                subscribed = true;
+                Debug.WriteLine($"Subscribed to \"{Path.Join(watcher.Path, watcher.Filter)}\". Thread = {Thread.CurrentThread.ManagedThreadId}");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Cant subscribe to \"{Path.Join(path, filter)}\": {ex.Message}. Thread = {Thread.CurrentThread.ManagedThreadId}");
+                subscribed = false;
+            }
 
-            Debug.WriteLine($"Subscribed to \"{Path.Join(watcher.Path, watcher.Filter)}\". Thread = {Thread.CurrentThread.ManagedThreadId}");
+            return subscribed;
         }
 
         public async Task Unsubscribe(string path, string pattern = null)

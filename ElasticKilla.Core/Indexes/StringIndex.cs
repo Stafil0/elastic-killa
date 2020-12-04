@@ -16,9 +16,12 @@ namespace ElasticKilla.Core.Indexes
 
         public override bool Contains(T query) => _data.ContainsKey(query);
 
-        public override ISet<string> Get(T query) => _data.TryGetValue(query, out var value)
-            ? new HashSet<string>(value)
-            : new HashSet<string>();
+        public override ISet<string> Get(T query)
+        {
+            return query != null && _data.TryGetValue(query, out var value)
+                ? new HashSet<string>(value)
+                : new HashSet<string>();
+        }
 
         protected override void AddIndex(T query, string value)
         {

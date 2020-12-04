@@ -17,6 +17,9 @@ namespace ElasticKilla.Core.Indexes
 
         public void Add(TKey query, TValue value)
         {
+            if (query == null || value == null)
+                return;
+
             Debug.WriteLine($"Adding \"{value}\" for \"{query}\" query to index. Thread = {Thread.CurrentThread.ManagedThreadId}");
 
             AddIndex(query, value);
@@ -26,6 +29,9 @@ namespace ElasticKilla.Core.Indexes
 
         public void Add(TKey query, IEnumerable<TValue> values)
         {
+            if (query == null || values == null)
+                return;
+
             var added = values.ToArray();
             if (!added.Any())
             {
@@ -42,6 +48,9 @@ namespace ElasticKilla.Core.Indexes
 
         public bool Remove(TKey query, TValue value)
         {
+            if (query == null || value == null)
+                return false;
+
             Debug.WriteLine($"Removing \"{value}\" for \"{query}\" query to index. Thread = {Thread.CurrentThread.ManagedThreadId}");
 
             var isRemoved = RemoveIndex(query, value);
@@ -54,6 +63,9 @@ namespace ElasticKilla.Core.Indexes
         
         public bool Remove(TKey query, IEnumerable<TValue> values)
         {
+            if (query == null || values == null)
+                return false;
+
             var removed = values.ToArray();
             if (!removed.Any())
             {
@@ -73,6 +85,10 @@ namespace ElasticKilla.Core.Indexes
 
         public bool RemoveAll(TKey query, out IEnumerable<TValue> old)
         {
+            old = default;
+            if (query == null)
+                return false;
+
             Debug.WriteLine($"Removing whole index for \"{query}\". Thread = {Thread.CurrentThread.ManagedThreadId}");
 
             var isRemoved = RemoveAllIndex(query, out old);

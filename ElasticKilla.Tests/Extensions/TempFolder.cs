@@ -14,9 +14,9 @@ namespace ElasticKilla.Tests.TestExtensions
 
         public string FolderPath { get; }
 
-        public void CreateFile(string extension = null) => CreateFile(() => string.Empty, extension);
+        public string CreateFile(string extension = null) => CreateFile(() => string.Empty, extension);
         
-        public void CreateFile(Func<string> generator, string extension = null)
+        public string CreateFile(Func<string> generator, string extension = null)
         {
             var path = Path.Join(FolderPath, Path.GetRandomFileName());
 
@@ -29,6 +29,7 @@ namespace ElasticKilla.Tests.TestExtensions
             stream.Write(Encoding.UTF8.GetBytes(generator()));
 
             Files.Add(path);
+            return path;
         }
 
         public void CreateFiles(int count, Func<string> generator, string extension = null)

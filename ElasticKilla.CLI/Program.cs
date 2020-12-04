@@ -8,12 +8,18 @@ namespace ElasticKilla.CLI
     internal class Inputs
     {
         public const string Exit = "exit";
-        
+
         public const string Query = "q";
-        
+
+        public const string DelayedQuery = "qw";
+
         public const string Subscribe = "sub";
-        
+
         public const string Unsubscribe = "unsub";
+
+        public const string Progress = "index?";
+
+        public const string Subscriptions = "sub?";
     }
 
     class Program
@@ -21,6 +27,10 @@ namespace ElasticKilla.CLI
         private const string Promt = "> ";
 
         private static FileAnalyzer _analyzer;
+
+        private static bool InProgress() => _analyzer.IsIndexing;
+
+        private static IEnumerable<string> Subscriptions() => _analyzer.Subscriptions;
 
         private static IEnumerable<string> Search(string query) => _analyzer.Search(query);
 
@@ -32,25 +42,69 @@ namespace ElasticKilla.CLI
 
         private static bool ProcessInput(string input)
         {
-            if (input == null)
+            if (string.IsNullOrWhiteSpace(input))
                 return true;
 
             var cmd = input.Split(" ");
-            switch (cmd[0])
+            var command = cmd[0];
+            switch (command)
             {
                 case Inputs.Query:
-                    var files = Search(cmd[1]);
+                case Inputs.DelayedQuery:
+                {
+                    if (cmd.Length < 2)
+                        break;
+
+                    var query = cmd[1];
+                    var files = command.Equals(Inputs.Query) ? Search(query) : DelayedSearch(query);
+
+                    Console.WriteLine($"Files, that contain \"{query}\":");
                     foreach (var file in files)
                         Console.WriteLine(file);
+
                     break;
+                }
                 case Inputs.Subscribe:
+                {
+                    if (cmd.Length < 2)
+                        break;
+
                     var path = cmd[1];
                     var pattern = cmd.Length > 2 ? cmd[2] : string.Empty;
+
+                    Console.WriteLine($"Subscribing to {path}");
                     Subscribe(path, pattern);
+
                     break;
+                }
                 case Inputs.Unsubscribe:
-                    Unsubscribe(cmd[1]);
+                {
+                    if (cmd.Length < 2)
+                        break;
+
+                    var path = cmd[1];
+                    Console.WriteLine($"Unsubscribing from {path}");
+                    Unsubscribe(path);
+
                     break;
+                }
+                case Inputs.Progress:
+                {
+                    var inProgress = InProgress() ? "indexing" : "not indexing";
+                    Console.WriteLine($"Analyzer is {inProgress} right now");
+
+                    break;
+                }
+                case Inputs.Subscriptions:
+                {
+                    var subscriptions = Subscriptions();
+
+                    Console.WriteLine($"Analyzer subscribed to:");
+                    foreach (var subscription in subscriptions)
+                        Console.WriteLine(subscription);
+
+                    break;
+                }
                 case Inputs.Exit:
                     return false;
             }

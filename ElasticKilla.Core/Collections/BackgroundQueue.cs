@@ -25,7 +25,13 @@ namespace ElasticKilla.Core.Collections
             }
         }
 
-        public IDisposable Pause() => new ReadLockCookie(_lock);
+        public IDisposable Pause()
+        {
+            var cookie = new ReadLockCookie(_lock);
+            SpinWait.SpinUntil(() => IsEmpty);
+
+            return cookie;
+        }
 
         private CancellationToken GetCancellationToken(string key)
         {

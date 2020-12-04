@@ -121,7 +121,8 @@ namespace ElasticKilla.Core.Collections
 
         public ConcurrentSet(IEnumerable<T> collection)
         {
-            _data = new ConcurrentDictionary<T, byte>(collection.Select(_ => new KeyValuePair<T, byte>(_, 0)));
+            var hashset = new HashSet<T>(collection);
+            _data = new ConcurrentDictionary<T, byte>(hashset.Select(key => new KeyValuePair<T, byte>(key, 0)));
         }
     }
 }

@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -28,7 +27,7 @@ namespace ElasticKilla.Core.Analyzers
 
         private readonly ITokenizer<string> _tokenizer;
 
-        private readonly BackgroundQueue _backgroundQueue;
+        private readonly BackgroundTaskQueue<string> _backgroundTaskQueue;
 
         private bool _disposed;
 
@@ -47,13 +46,13 @@ namespace ElasticKilla.Core.Analyzers
             }
         }
 
-        public bool IsIndexing => !_backgroundQueue.IsEmpty;
+        public bool IsIndexing => !_backgroundTaskQueue.IsEmpty;
 
         public Task<IEnumerable<string>> DelayedSearch(string query)
         {
             return Task.Run(() =>
             {
-                using (_backgroundQueue.Pause())
+                using (_backgroundTaskQueue.Pause())
                 {
                     return base.Search(query);
                 }
@@ -91,27 +90,28 @@ namespace ElasticKilla.Core.Analyzers
 
         public async Task Subscribe(string path, string pattern = null)
         {
-            if (!Directory.Exists(path))
+            var normalizedFolder = PathExtensions.NormalizePath(path);
+            if (!Directory.Exists(normalizedFolder))
             {
                 Debug.WriteLine($"Directory \"{path}\" not exists. Thread = {Thread.CurrentThread.ManagedThreadId}");
                 return;
             }
 
-            var filter = string.IsNullOrWhiteSpace(pattern) ? DefaultFilePattern : pattern;
+            var filter = string.IsNullOrWhiteSpace(pattern) ? DefaultFilePattern : pattern.ToLowerInvariant();
             using (new UpgradeableReadLockCookie(_subscriptionLock))
             {
-                if (!_watchers.TryGetValue(path, out var watcher))
+                if (!_watchers.TryGetValue(normalizedFolder, out var watcher))
                 {
                     using (new WriteLockCookie(_subscriptionLock))
                     {
-                        if (TryGetAndSubscribeWatcher(path, filter, out watcher))
-                            _watchers[path] = watcher;
+                        if (TryGetAndSubscribeWatcher(normalizedFolder, filter, out watcher))
+                            _watchers[normalizedFolder] = watcher;
                         else return;
                     }
                 }
                 else
                 {
-                    if (watcher.Filters.Contains(filter))
+                    if (watcher.Filters.Contains(filter, StringComparer.InvariantCultureIgnoreCase))
                         return;
 
                     using (new WriteLockCookie(_subscriptionLock))
@@ -123,14 +123,18 @@ namespace ElasticKilla.Core.Analyzers
             using (new WriteLockCookie(_queueLock))
             {
                 tasks.AddRange(DirectoryExtensions
-                    .GetFilesSafe(path, filter)
-                    .Select(x => _backgroundQueue.QueueTask(() =>
+                    .GetFilesSafe(normalizedFolder, filter)
+                    .Select(x =>
                     {
-                        var tokens = ParseTokens(x);
+                        var normalizedFile = PathExtensions.NormalizePath(x);
+                        return _backgroundTaskQueue.QueueTask(normalizedFolder, () =>
+                        {
+                            var tokens = ParseTokens(normalizedFile);
 
-                        Debug.WriteLine($"Start indexing \"{x}\". Thread = {Thread.CurrentThread.ManagedThreadId}");
-                        Indexer.Add(x, tokens);
-                    }, x)));
+                            Debug.WriteLine($"Start indexing \"{x}\". Thread = {Thread.CurrentThread.ManagedThreadId}");
+                            Indexer.Add(normalizedFile, tokens);
+                        }, normalizedFile);
+                    }));
             }
 
             await Task.WhenAll(tasks).IgnoreExceptions();
@@ -166,9 +170,10 @@ namespace ElasticKilla.Core.Analyzers
         public async Task Unsubscribe(string path, string pattern = null)
         {
             string filter;
+            var normalizedFolder = PathExtensions.NormalizePath(path);
             using (new UpgradeableReadLockCookie(_subscriptionLock))
             {
-                if (!_watchers.TryGetValue(path, out var watcher))
+                if (!_watchers.TryGetValue(normalizedFolder, out var watcher))
                 {
                     Debug.WriteLine($"No subscribed watchers for \"{path}\". Thread = {Thread.CurrentThread.ManagedThreadId}");
                     return;
@@ -176,14 +181,16 @@ namespace ElasticKilla.Core.Analyzers
 
                 filter = string.IsNullOrWhiteSpace(pattern)
                     ? DefaultFilePattern
-                    : watcher.Filters.FirstOrDefault(x => x.Equals(pattern));
+                    : watcher.Filters.FirstOrDefault(x => x.Equals(pattern, StringComparison.InvariantCultureIgnoreCase));
 
                 using (new WriteLockCookie(_subscriptionLock))
                 {
-                    watcher.Filters.Remove(pattern);
+                    if (filter != null)
+                        watcher.Filters.Remove(filter);
+
                     if (string.IsNullOrWhiteSpace(pattern) || !watcher.Filters.Any())
                     {
-                        _watchers.Remove(path);
+                        _watchers.Remove(normalizedFolder);
                         UnsubscribeWatcher(watcher);
                     }
                 }
@@ -195,14 +202,15 @@ namespace ElasticKilla.Core.Analyzers
                 using (new WriteLockCookie(_queueLock))
                 {
                     tasks.AddRange(DirectoryExtensions
-                        .GetFilesSafe(path, filter)
+                        .GetFilesSafe(normalizedFolder, filter)
                         .Select(x =>
                         {
-                            _backgroundQueue.CancelTasks(x);
-                            return _backgroundQueue.QueueTask(() =>
+                            var normalizedFile = PathExtensions.NormalizePath(x);
+                            _backgroundTaskQueue.CancelTasks(normalizedFile);
+                            return _backgroundTaskQueue.QueueTask(normalizedFolder, () =>
                             {
                                 Debug.WriteLine($"Removing index for \"{x}\". Thread = {Thread.CurrentThread.ManagedThreadId}");
-                                Indexer.Remove(x);
+                                Indexer.Remove(normalizedFile);
                             });
                         }));
                 }
@@ -228,13 +236,15 @@ namespace ElasticKilla.Core.Analyzers
         {
             using (new WriteLockCookie(_queueLock))
             {
-                _backgroundQueue.QueueTask(() =>
+                var normalized = PathExtensions.NormalizePath(e.FullPath);
+                var directory = Path.GetDirectoryName(normalized);
+                _backgroundTaskQueue.QueueTask(directory, () =>
                 {
-                    var tokens = ParseTokens(e.FullPath);
+                    var tokens = ParseTokens(normalized);
 
                     Debug.WriteLine($"\"{e.FullPath}\" changed, reindexing. Thread = {Thread.CurrentThread.ManagedThreadId}");
-                    Indexer.Update(e.FullPath, tokens);
-                }, e.FullPath);
+                    Indexer.Update(normalized, tokens);
+                }, normalized);
             }
         }
 
@@ -242,13 +252,15 @@ namespace ElasticKilla.Core.Analyzers
         {
             using (new WriteLockCookie(_queueLock))
             {
-                _backgroundQueue.QueueTask(() =>
+                var normalized = PathExtensions.NormalizePath(e.FullPath);
+                var directory = Path.GetDirectoryName(normalized);
+                _backgroundTaskQueue.QueueTask(directory, () =>
                 {
-                    var tokens = ParseTokens(e.FullPath);
+                    var tokens = ParseTokens(normalized);
 
                     Debug.WriteLine($"\"{e.FullPath}\" created, indexing. Thread = {Thread.CurrentThread.ManagedThreadId}");
-                    Indexer.Add(e.FullPath, tokens);
-                }, e.FullPath);
+                    Indexer.Add(normalized, tokens);
+                }, normalized);
             }
         }
 
@@ -256,22 +268,28 @@ namespace ElasticKilla.Core.Analyzers
         {
             using (new WriteLockCookie(_queueLock))
             {
-                _backgroundQueue.CancelTasks(e.FullPath);
-                _backgroundQueue.QueueTask(() =>
+                var normalized = PathExtensions.NormalizePath(e.FullPath);
+                var directory = Path.GetDirectoryName(normalized);
+                _backgroundTaskQueue.CancelTasks(normalized);
+                _backgroundTaskQueue.QueueTask(directory, () =>
                 {
                     Debug.WriteLine($"\"{e.FullPath}\" removed, clearing index. Thread = {Thread.CurrentThread.ManagedThreadId}");
-                    Indexer.Remove(e.FullPath);
+                    Indexer.Remove(normalized);
                 });
             }
 
             // Если подписались на конкретный файл.
             using (new UpgradeableReadLockCookie(_subscriptionLock))
             {
-                if (source is FileSystemWatcher watcher && watcher.Filters.Contains(e.Name))
+                if (source is FileSystemWatcher watcher)
                 {
+                    var file = watcher.Filters.FirstOrDefault(x => string.Equals(x, e.Name, StringComparison.InvariantCultureIgnoreCase));
+                    if (file == null) 
+                        return;
+
                     using (new WriteLockCookie(_subscriptionLock))
                     {
-                        watcher.Filters.Remove(e.Name);
+                        watcher.Filters.Remove(file);
                     }
                 }
             }
@@ -281,22 +299,29 @@ namespace ElasticKilla.Core.Analyzers
         {
             using (new WriteLockCookie(_queueLock))
             {
-                _backgroundQueue.QueueTask(() =>
+                var normalizedOld = PathExtensions.NormalizePath(e.OldFullPath);
+                var normalizedNew = PathExtensions.NormalizePath(e.FullPath);
+                var directory = PathExtensions.NormalizePath(normalizedNew);
+                _backgroundTaskQueue.QueueTask(directory, () =>
                 {
                     Debug.WriteLine($"\"{e.OldFullPath}\" renamed to \"{e.FullPath}\", reindexing. Thread = {Thread.CurrentThread.ManagedThreadId}");
-                    Indexer.Switch(e.OldFullPath, e.FullPath);
+                    Indexer.Switch(normalizedOld, normalizedNew);
                 });
             }
 
             // Если подписались на конкретный файл.
             using (new UpgradeableReadLockCookie(_subscriptionLock))
             {
-                if (source is FileSystemWatcher watcher && watcher.Filters.Contains(e.OldName))
+                if (source is FileSystemWatcher watcher)
                 {
+                    var file = watcher.Filters.FirstOrDefault(x => string.Equals(x, e.OldName, StringComparison.InvariantCultureIgnoreCase));
+                    if (file == null) 
+                        return;
+
                     using (new WriteLockCookie(_subscriptionLock))
                     {
-                        watcher.Filters.Remove(e.OldName);
-                        watcher.Filters.Add(e.Name);
+                        watcher.Filters.Remove(file);
+                        watcher.Filters.Add(e.Name.ToLowerInvariant());
                     }
                 }
             }
@@ -315,7 +340,7 @@ namespace ElasticKilla.Core.Analyzers
             {
                 _queueLock?.Dispose();
                 _subscriptionLock?.Dispose();
-                _backgroundQueue?.Dispose();
+                _backgroundTaskQueue?.Dispose();
                 foreach (var (_, watcher) in _watchers)
                     UnsubscribeWatcher(watcher);
             }
@@ -354,7 +379,7 @@ namespace ElasticKilla.Core.Analyzers
         {
             _tokenizer = tokenizer;
             _watchers = new Dictionary<string, FileSystemWatcher>();
-            _backgroundQueue = new BackgroundQueue();
+            _backgroundTaskQueue = new BackgroundTaskQueue<string>();
         }
     }
 }

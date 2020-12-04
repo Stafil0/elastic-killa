@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using ElasticKilla.Core.Analyzers;
+using ElasticKilla.Core.Extensions;
 using ElasticKilla.Core.Indexers;
 using ElasticKilla.Core.Searchers;
 using ElasticKilla.Core.Tokenizer;
@@ -47,10 +48,10 @@ namespace ElasticKilla.Tests.AnalyzersTests
         }
 
         [Theory]
-        [InlineData(".tmp", 0, ".vjuh", 20)]
-        [InlineData(".tmp", 10, ".vjuh", 20)]
-        [InlineData(".tmp", 100, ".vjuh", 200)]
-        [InlineData(".tmp", 1000, ".vjuh", 2000)]
+        [InlineData(".TMP", 0, ".VJUH", 20)]
+        [InlineData(".TMP", 10, ".VJUH", 20)]
+        [InlineData(".TMP", 100, ".VJUH", 200)]
+        [InlineData(".TMP", 1000, ".VJUH", 2000)]
         public async Task OnSubscribe_MultipleFilesWithPattern_AddToIndexMultiple(
             string firstPattern, int firstFilesGroupCount,
             string secondPattern, int secondFilesGroupCount)
@@ -290,7 +291,7 @@ namespace ElasticKilla.Tests.AnalyzersTests
             var subscribe = Task.Run(async () => await analyzer.Subscribe(path));
 
             // Дадим попдисаться.
-            await Task.Delay(100);
+            await Task.Delay(1000);
 
             var search = analyzer.Search(guid).ToList();
             Assert.InRange(search.Count, filesCount > 0 ? 1 : 0, filesCount);
@@ -413,7 +414,7 @@ namespace ElasticKilla.Tests.AnalyzersTests
             {
                 var newFile = Path.GetRandomFileName();
                 var oldPath = tmp.RenameFile(newFile);
-                var newPath = Path.Join(tmp.FolderPath, newFile);
+                var newPath = PathExtensions.NormalizePath(Path.Join(tmp.FolderPath, newFile));
                 renamed.Add((oldPath, newPath));
             }
 
@@ -556,7 +557,7 @@ namespace ElasticKilla.Tests.AnalyzersTests
             {
                 var newFile = Path.GetRandomFileName();
                 var oldPath = folder.RenameFile(newFile);
-                var newPath = Path.Join(folder.FolderPath, newFile);
+                var newPath = PathExtensions.NormalizePath(Path.Join(folder.FolderPath, newFile));
                 return (oldPath, newPath);
             }
 

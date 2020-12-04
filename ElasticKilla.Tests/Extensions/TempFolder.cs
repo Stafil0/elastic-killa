@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using ElasticKilla.Core.Extensions;
 
 namespace ElasticKilla.Tests.TestExtensions
 {
@@ -12,7 +13,7 @@ namespace ElasticKilla.Tests.TestExtensions
 
         public List<string> Files { get; }
 
-        public string FolderPath { get; }
+        public readonly string FolderPath;
 
         public string CreateFile(string extension = null) => CreateFile(() => string.Empty, extension);
         
@@ -22,6 +23,8 @@ namespace ElasticKilla.Tests.TestExtensions
 
             if (!string.IsNullOrWhiteSpace(extension))
                 path = Path.ChangeExtension(path, extension);
+
+            path = PathExtensions.NormalizePath(path);
 
             using var stream = File.Create(path);
 
@@ -49,6 +52,8 @@ namespace ElasticKilla.Tests.TestExtensions
             var file = Files[index];
             var directory = Path.GetDirectoryName(file);
             var newFile = Path.Join(directory, newName);
+            
+            newFile = PathExtensions.NormalizePath(newFile);
 
             File.Move(file, newFile);
             Files.Remove(file);
@@ -75,7 +80,7 @@ namespace ElasticKilla.Tests.TestExtensions
         {
             Files = new List<string>();
 
-            FolderPath = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+            FolderPath = PathExtensions.NormalizePath(Path.Combine(Path.GetTempPath(), Path.GetRandomFileName()));
             Directory.CreateDirectory(FolderPath);
         }
 

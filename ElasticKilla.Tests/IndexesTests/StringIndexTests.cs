@@ -19,7 +19,7 @@ namespace ElasticKilla.Tests.IndexesTests
         [InlineData(10000)]
         public async Task OnAdd_AddEventInvoked_ReturnedAddedValue(int tasksCount)
         {
-            var index = new StringIndex<string>();
+            using var index = new StringIndex<string>();
             var inputs = new Dictionary<string, string>();
             for (var i = 0; i < tasksCount; i++)
                 inputs[Guid.NewGuid().ToString()] = Guid.NewGuid().ToString();
@@ -49,7 +49,7 @@ namespace ElasticKilla.Tests.IndexesTests
         [InlineData(10000)]
         public async Task OnAddMultiple_AddEventInvoked_ReturnedAddedValues(int tasksCount)
         {
-            var index = new StringIndex<string>();
+            using var index = new StringIndex<string>();
             var inputs = new Dictionary<string, IEnumerable<string>>();
             for (var i = 0; i < tasksCount; i++)
                 inputs[Guid.NewGuid().ToString()] = new [] {Guid.NewGuid().ToString(), Guid.NewGuid().ToString(), Guid.NewGuid().ToString()};
@@ -79,7 +79,7 @@ namespace ElasticKilla.Tests.IndexesTests
         [InlineData(10000)]
         public async Task OnAddEmpty_AddEventNotInvoked(int tasksCount)
         {
-            var index = new StringIndex<string>();
+            using var index = new StringIndex<string>();
             var inputs = new Dictionary<string, IEnumerable<string>>();
             for (var i = 0; i < tasksCount; i++)
                 inputs[Guid.NewGuid().ToString()] = new string[0];
@@ -109,7 +109,7 @@ namespace ElasticKilla.Tests.IndexesTests
         [InlineData(10000)]
         public async Task OnRemove_RemoveEventInvoked_ReturnedRemovedValue(int tasksCount)
         {
-            var index = new StringIndex<string>();
+            using var index = new StringIndex<string>();
             var inputs = new Dictionary<string, string>();
             for (var i = 0; i < tasksCount; i++)
                 inputs[Guid.NewGuid().ToString()] = Guid.NewGuid().ToString();
@@ -142,7 +142,7 @@ namespace ElasticKilla.Tests.IndexesTests
         [InlineData(10000)]
         public async Task OnRemoveMultiple_RemoveEventInvoked_ReturnedRemovedValues(int tasksCount)
         {
-            var index = new StringIndex<string>();
+            using var index = new StringIndex<string>();
             var inputs = new Dictionary<string, IEnumerable<string>>();
             for (var i = 0; i < tasksCount; i++)
                 inputs[Guid.NewGuid().ToString()] = new [] {Guid.NewGuid().ToString(), Guid.NewGuid().ToString(), Guid.NewGuid().ToString()};
@@ -175,7 +175,7 @@ namespace ElasticKilla.Tests.IndexesTests
         [InlineData(10000)]
         public async Task OnRemoveEmpty_RemoveEventNotInvoked(int tasksCount)
         {
-            var index = new StringIndex<string>();
+            using var index = new StringIndex<string>();
             var inputs = new Dictionary<string, IEnumerable<string>>();
             for (var i = 0; i < tasksCount; i++)
                 inputs[Guid.NewGuid().ToString()] = new string[0];
@@ -208,7 +208,7 @@ namespace ElasticKilla.Tests.IndexesTests
         [InlineData(10000)]
         public async Task OnRemoveAll_RemoveEventInvoked_ReturnedRemovedValues(int tasksCount)
         {
-            var index = new StringIndex<string>();
+            using var index = new StringIndex<string>();
             var inputs = new Dictionary<string, IEnumerable<string>>();
             for (var i = 0; i < tasksCount; i++)
                 inputs[Guid.NewGuid().ToString()] = new [] {Guid.NewGuid().ToString(), Guid.NewGuid().ToString(), Guid.NewGuid().ToString()};
@@ -238,7 +238,7 @@ namespace ElasticKilla.Tests.IndexesTests
         [Fact]
         public void AddNull_DoNothing()
         {
-            var index = new StringIndex<string>();
+            using var index = new StringIndex<string>();
             index.Add(null, new string[0]);
             
             var result = index.Get(null);
@@ -254,7 +254,7 @@ namespace ElasticKilla.Tests.IndexesTests
         [InlineData(10000)]
         public async Task AddUnique_GetByQuery_EqualsWithInput(int tasksCount)
         {
-            var index = new StringIndex<string>();
+            using var index = new StringIndex<string>();
             var inputs = new Dictionary<string, IEnumerable<string>>();
             for (var i = 0; i < tasksCount; i++)
                 inputs[Guid.NewGuid().ToString()] = new [] {Guid.NewGuid().ToString(), Guid.NewGuid().ToString(), Guid.NewGuid().ToString()};
@@ -290,7 +290,7 @@ namespace ElasticKilla.Tests.IndexesTests
         [InlineData(10000)]
         public async Task AddNonUnique_GetByQuery_ContainsOnlyUnique(int tasksCount)
         {
-            var index = new StringIndex<string>();
+            using var index = new StringIndex<string>();
             var inputs = new Dictionary<string, IEnumerable<string>>();
             for (var i = 0; i < tasksCount; i++)
             {
@@ -331,7 +331,7 @@ namespace ElasticKilla.Tests.IndexesTests
         [InlineData(10000)]
         public async Task AddMultipleUnique_GetByQuery_EqualsWithInput(int tasksCount)
         {
-            var index = new StringIndex<string>();
+            using var index = new StringIndex<string>();
             var inputs = new Dictionary<string, IEnumerable<string>>();
             for (var i = 0; i < tasksCount; i++)
                 inputs[Guid.NewGuid().ToString()] = new [] {Guid.NewGuid().ToString(), Guid.NewGuid().ToString(), Guid.NewGuid().ToString()};
@@ -363,17 +363,20 @@ namespace ElasticKilla.Tests.IndexesTests
         [InlineData(10000)]
         public async Task AddMultipleNonUnique_GetByQuery_ContainsOnlyUnique(int tasksCount)
         {
-            var index = new StringIndex<string>();
+            using var index = new StringIndex<string>();
             var inputs = new Dictionary<string, IEnumerable<string>>();
             for (var i = 0; i < tasksCount; i++)
             {
                 var nonUnique = Guid.NewGuid().ToString();
-                inputs[Guid.NewGuid().ToString()] = new[] {nonUnique, nonUnique, nonUnique};
+                inputs[Guid.NewGuid().ToString()] = new[] {nonUnique, nonUnique, nonUnique, nonUnique};
             }
 
             var tasks = new List<Task>();
             foreach (var (q, input) in inputs)
-                tasks.Add(Task.Run(() => index.Add(q, input)));
+            {
+                tasks.Add(Task.Run(() => index.Add(q, input.Take(2))));
+                tasks.Add(Task.Run(() => index.Add(q, input.Skip(2))));
+            }
 
             await Task.WhenAll(tasks);
             
@@ -395,7 +398,7 @@ namespace ElasticKilla.Tests.IndexesTests
         [Fact]
         public void RemoveNull_DoNothing()
         {
-            var index = new StringIndex<string>();
+            using var index = new StringIndex<string>();
             var result = index.Remove(null, new string[0]);
             Assert.False(result);
         }
@@ -409,7 +412,7 @@ namespace ElasticKilla.Tests.IndexesTests
         [InlineData(10000)]
         public async Task RemoveSingle_GetByQuery_MustNotContainValue(int tasksCount)
         {
-            var index = new StringIndex<string>();
+            using var index = new StringIndex<string>();
             var inputs = new Dictionary<string, IEnumerable<string>>();
             for (var i = 0; i < tasksCount; i++)
                 inputs[Guid.NewGuid().ToString()] = new [] {Guid.NewGuid().ToString(), Guid.NewGuid().ToString(), Guid.NewGuid().ToString()};
@@ -450,7 +453,7 @@ namespace ElasticKilla.Tests.IndexesTests
         public async Task RemoveMultiple_GetByQuery_NotContainsRemoved(int tasksCount)
         {
             var skipTake = 3;
-            var index = new StringIndex<string>();
+            using var index = new StringIndex<string>();
             var inputs = new Dictionary<string, IEnumerable<string>>();
             for (var i = 0; i < tasksCount; i++)
                 inputs[Guid.NewGuid().ToString()] = new []
@@ -494,7 +497,7 @@ namespace ElasticKilla.Tests.IndexesTests
         [InlineData(10000)]
         public async Task RemoveAll_GetByQuery_ReturnsEmpty(int tasksCount)
         {
-            var index = new StringIndex<string>();
+            using var index = new StringIndex<string>();
             var inputs = new Dictionary<string, IEnumerable<string>>();
             for (var i = 0; i < tasksCount; i++)
                 inputs[Guid.NewGuid().ToString()] = new []
@@ -535,7 +538,7 @@ namespace ElasticKilla.Tests.IndexesTests
         [InlineData(10000)]
         public async Task Flush_GetByQuery_ReturnsEmpty(int tasksCount)
         {
-            var index = new StringIndex<string>();
+            using var index = new StringIndex<string>();
             var inputs = new Dictionary<string, IEnumerable<string>>();
             for (var i = 0; i < tasksCount; i++)
                 inputs[Guid.NewGuid().ToString()] = new []
@@ -571,7 +574,7 @@ namespace ElasticKilla.Tests.IndexesTests
         [InlineData(10000)]
         public async Task RemoveFromEmpty_GetByQuery_MustBeEmpty(int tasksCount)
         {
-            var index = new StringIndex<string>();
+            using var index = new StringIndex<string>();
             var inputs = new List<string>();
             for (var i = 0; i < tasksCount; i++)
                 inputs.Add(Guid.NewGuid().ToString());
@@ -594,9 +597,22 @@ namespace ElasticKilla.Tests.IndexesTests
         [Fact]
         public void GetNull_ReturnNothing()
         {
-            var index = new StringIndex<string>();
+            using var index = new StringIndex<string>();
             var result = index.Get(null);
             Assert.Empty(result);
+        }
+        
+        [Fact]
+        public void Contains_ReturnIfContain()
+        {
+            var existed = "existed";
+            var notExisted = "notExisted";
+            
+            using var index = new StringIndex<string>();
+            index.Add(existed, Guid.NewGuid().ToString());
+
+            Assert.True(index.Contains(existed));
+            Assert.False(index.Contains(notExisted));
         }
     }
 }

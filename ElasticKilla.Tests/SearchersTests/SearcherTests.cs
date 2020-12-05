@@ -10,6 +10,21 @@ namespace ElasticKilla.Tests.SearchersTests
     public class SearcherTests
     {
         [Fact]
+        public void Search_Null_ReturnEmpty_NoOtherCalls()
+        {
+            var index = new Mock<IIndex<string, string>>();
+            index.Setup(x => x.Get(It.IsAny<string>())).Returns(It.IsAny<ISet<string>>());
+
+            using var searcher = new Searcher<string, string>(index.Object);
+
+            var result = searcher.Search(null);
+            Assert.Empty(result);
+
+            index.Verify(x => x.Get(It.IsAny<string>()), Times.Never);
+            index.VerifyNoOtherCalls();
+        } 
+        
+        [Fact]
         public void Search_GetFromIndex_ReturnResult_NoOtherCalls()
         {
             var query = Guid.NewGuid().ToString();
@@ -18,7 +33,7 @@ namespace ElasticKilla.Tests.SearchersTests
             var index = new Mock<IIndex<string, string>>();
             index.Setup(x => x.Get(query)).Returns(response);
 
-            var searcher = new Searcher<string, string>(index.Object);
+            using var searcher = new Searcher<string, string>(index.Object);
 
             var result = searcher.Search(query);
             Assert.Equal(result, response);

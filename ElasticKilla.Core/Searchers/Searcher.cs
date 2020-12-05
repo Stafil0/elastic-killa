@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Threading;
 using ElasticKilla.Core.Indexes;
 
@@ -14,6 +15,9 @@ namespace ElasticKilla.Core.Searchers
 
         public IEnumerable<TValue> Search(TKey query)
         {
+            if (query == null)
+                return Enumerable.Empty<TValue>();
+
             Debug.WriteLine($"Searching \"{query}\" in index. Thread = {Thread.CurrentThread.ManagedThreadId}");
             return Index.Get(query);
         }

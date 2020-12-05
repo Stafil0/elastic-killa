@@ -167,7 +167,7 @@ namespace ElasticKilla.Tests.AnalyzersTests
             }
 
             await Task.WhenAll(tasks);
-            await Task.Delay(1000);
+            await Task.Delay(5 * subscriptionsCount);
             
             Assert.InRange(analyzer.Subscriptions.Count, subscriptionsCount > 0 ? 1 : 0, subscriptionsCount);
         }
@@ -212,8 +212,12 @@ namespace ElasticKilla.Tests.AnalyzersTests
             }
         }
 
-        [Fact]
-        public async Task OnSubscribe_CheckProgress_MustBeIndexing()
+        [Theory]
+        [InlineData(1)]
+        [InlineData(10)]
+        [InlineData(100)]
+        [InlineData(1000)]
+        public async Task OnSubscribe_CheckProgress_MustBeIndexing(int filesCount)
         {
             var guids = Generators.Generate(1000, () => Guid.NewGuid().ToString()).ToArray();
             var text = string.Join(' ', guids);
@@ -224,13 +228,14 @@ namespace ElasticKilla.Tests.AnalyzersTests
             tokenizer.Setup(x => x.Tokenize(text)).Returns(guids);
 
             var analyzer = new FileAnalyzer(tokenizer.Object, searcher.Object, indexer.Object);
-            using var tmp = new TempFolder(1, () => text);
+            using var tmp = new TempFolder(filesCount, () => text);
 
             var task = analyzer.Subscribe(tmp.FolderPath);
 
             Assert.True(analyzer.IsIndexing);
 
             await task;
+            await Task.Delay(5 * filesCount);
 
             Assert.False(analyzer.IsIndexing);
         }
@@ -246,7 +251,7 @@ namespace ElasticKilla.Tests.AnalyzersTests
             var indexer = new Mock<IIndexer<string, string>>();
             var tokenizer = new Mock<ITokenizer<string>>();
 
-            var analyzer = new FileAnalyzer(tokenizer.Object, searcher.Object, indexer.Object);
+            using var analyzer = new FileAnalyzer(tokenizer.Object, searcher.Object, indexer.Object);
 
             var tasks = new List<Task>();
             for (var i = 0; i < subscriptionsCount; i++)
@@ -371,7 +376,7 @@ namespace ElasticKilla.Tests.AnalyzersTests
             await analyzer.Subscribe(tmp.FolderPath);
 
             tmp.CreateFiles(count);
-            await Task.Delay(1000);
+            await Task.Delay(10 * count);
 
             indexer.Verify(x => x.Add(It.IsAny<string>(), It.IsAny<IEnumerable<string>>()),
                 Times.Exactly(initCount + count));
@@ -419,7 +424,7 @@ namespace ElasticKilla.Tests.AnalyzersTests
             }
 
             // Даем время сработать событиям переименования.
-            await Task.Delay(1000);
+            await Task.Delay(10 * renameCount);
 
             indexer.Verify(x => x.Switch(It.IsAny<string>(), It.IsAny<string>()), Times.Exactly(renameCount));
             foreach (var (oldPath, newPath) in renamed)
@@ -459,7 +464,7 @@ namespace ElasticKilla.Tests.AnalyzersTests
             }
 
             // Дадим всем событиям на удаление сработать.
-            await Task.Delay(3000);
+            await Task.Delay(5 * filesCount);
 
             foreach (var file in files)
             {
@@ -491,7 +496,7 @@ namespace ElasticKilla.Tests.AnalyzersTests
             var guid = guids[random.Next(guids.Length)];
 
             await Task.Run(async () => await analyzer.Subscribe(path));
-            await Task.Delay(1000);
+            await Task.Delay(filesCount);
 
             var search = analyzer.Search(guid).ToList();
             Assert.Equal(filesCount, search.Count);
@@ -568,7 +573,7 @@ namespace ElasticKilla.Tests.AnalyzersTests
                 renamed.Add(Rename(secondTemp));
 
             // Даем время сработать событиям переименования.
-            await Task.Delay(1000);
+            await Task.Delay(5 * (firstChangeCount + secondChangeCount));
 
             indexer.Verify(x => x.Switch(It.IsAny<string>(), It.IsAny<string>()),
                 Times.Exactly(firstChangeCount + secondChangeCount));
@@ -681,14 +686,13 @@ namespace ElasticKilla.Tests.AnalyzersTests
             var unsub = Task.Run(async () => await analyzer.Unsubscribe(folder));
 
             // Дадим отписаться.
-            await Task.Delay(100);
+            await Task.Delay(1000);
 
             var sub = Task.Run(async () => await analyzer.Subscribe(folder));
 
             await Task.WhenAll(unsub, sub);
 
-            indexer.Verify(x => x.Add(It.IsAny<string>(), It.IsAny<IEnumerable<string>>()),
-                Times.Exactly(filesCount * 2));
+            indexer.Verify(x => x.Add(It.IsAny<string>(), It.IsAny<IEnumerable<string>>()), Times.Exactly(filesCount * 2));
             foreach (var file in tmp.Files)
             {
                 indexer.Verify(x => x.Add(file, It.IsAny<IEnumerable<string>>()), Times.Exactly(2));
@@ -702,8 +706,7 @@ namespace ElasticKilla.Tests.AnalyzersTests
         [InlineData(10, 5)]
         [InlineData(100, 50)]
         [InlineData(1000, 500)]
-        public async Task OnUnsubscribe_StartAddingFiles_AddOrCancelThenRemoveIndex(int initFilesCount,
-            int newFilesCount)
+        public async Task OnUnsubscribe_StartAddingFiles_AddOrCancelThenRemoveIndex(int initFilesCount, int newFilesCount)
         {
             var searcher = new Mock<ISearcher<string, string>>();
             var indexer = new Mock<IIndexer<string, string>>(MockBehavior.Strict);
@@ -744,8 +747,7 @@ namespace ElasticKilla.Tests.AnalyzersTests
         [InlineData(10, 5)]
         [InlineData(100, 50)]
         [InlineData(1000, 500)]
-        public async Task OnUnsubscribe_StartChangingFiles_AddOrCancelThenRemoveIndex(int initFilesCount,
-            int newFilesCount)
+        public async Task OnUnsubscribe_StartChangingFiles_AddOrCancelThenRemoveIndex(int initFilesCount, int newFilesCount)
         {
             var searcher = new Mock<ISearcher<string, string>>();
             var indexer = new Mock<IIndexer<string, string>>(MockBehavior.Strict);

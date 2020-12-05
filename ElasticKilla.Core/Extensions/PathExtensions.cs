@@ -7,7 +7,7 @@ namespace ElasticKilla.Core.Extensions
     {
         public static string NormalizePath(string path)
         {
-            return Path.GetFullPath(path)
+            return Path.GetFullPath(new DirectoryInfo(path).FullName)
                 .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
                 .ToUpperInvariant();
         }

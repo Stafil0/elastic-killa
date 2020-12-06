@@ -15,8 +15,8 @@ namespace ElasticKilla.Tests.Utils
 
         public readonly string FolderPath;
 
-        public string GetRandomFile() => PathExtensions.NormalizePath(Files[_rng.Next(Files.Count)]);
-        
+        public string GetRandomFile() => !Files.Any() ? string.Empty : PathExtensions.NormalizePath(Files[_rng.Next(Files.Count)]);
+
         public string CreateFile(string extension = null) => CreateFile(() => string.Empty, extension);
         
         public string CreateFile(Func<string> generator, string extension = null)

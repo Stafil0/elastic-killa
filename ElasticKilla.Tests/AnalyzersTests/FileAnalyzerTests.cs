@@ -869,7 +869,7 @@ namespace ElasticKilla.Tests.AnalyzersTests
         [InlineData(10, 5)]
         [InlineData(100, 50)]
         [InlineData(1000, 500)]
-        public async Task OnUnsubscribe_StartChangingFiles_AddOrCancelThenRemoveIndex(int initFilesCount, int newFilesCount)
+        public async Task OnUnsubscribe_StartChangingFiles_AddOrCancelThenRemoveIndex(int initFilesCount, int renamesCount)
         {
             var searcher = new Mock<ISearcher<string, string>>();
             var indexer = new Mock<IIndexer<string, string>>(MockBehavior.Strict);
@@ -886,18 +886,22 @@ namespace ElasticKilla.Tests.AnalyzersTests
             await Task.Delay(10);
             
             var newFiles = new List<(string oldFile, string newFile)>();
-            for (var i = 0; i < newFilesCount; i++)
+
+            if (tmp.Files.Any())
             {
-                var sequence = new MockSequence();
-                var newName = Path.GetRandomFileName();
-                var newFile = Path.Join(tmp.FolderPath, newName);
-                var oldFile = tmp.GetRandomFile();
-                
-                indexer.InSequence(sequence).Setup(x => x.Switch(oldFile, newFile));
-                indexer.InSequence(sequence).Setup(x => x.Remove(newFile));
-                
-                tmp.RenameFile(oldFile, newName);
-                newFiles.Add((oldFile, newFile));
+                for (var i = 0; i < renamesCount; i++)
+                {
+                    var sequence = new MockSequence();
+                    var newName = Path.GetRandomFileName();
+                    var newFile = Path.Join(tmp.FolderPath, newName);
+                    var oldFile = tmp.GetRandomFile();
+
+                    indexer.InSequence(sequence).Setup(x => x.Switch(oldFile, newFile));
+                    indexer.InSequence(sequence).Setup(x => x.Remove(newFile));
+
+                    tmp.RenameFile(oldFile, newName);
+                    newFiles.Add((oldFile, newFile));
+                }
             }
 
             await unsubscribe;
@@ -918,7 +922,7 @@ namespace ElasticKilla.Tests.AnalyzersTests
         [InlineData(10, 5)]
         [InlineData(100, 50)]
         [InlineData(1000, 500)]
-        public async Task AfterUnsubscribe_StartChangingFiles_DoNothing(int initFilesCount, int newFilesCount)
+        public async Task AfterUnsubscribe_StartChangingFiles_DoNothing(int initFilesCount, int renamesCount)
         {
             var searcher = new Mock<ISearcher<string, string>>();
             var indexer = new Mock<IIndexer<string, string>>();
@@ -939,14 +943,18 @@ namespace ElasticKilla.Tests.AnalyzersTests
             SpinWait.SpinUntil(() => !analyzer.IsIndexing);
 
             var newFiles = new List<(string oldFile, string newFile)>();
-            for (var i = 0; i < newFilesCount; i++)
-            {
-                var newName = Path.GetRandomFileName();
-                var newFile = Path.Join(tmp.FolderPath, newName);
-                var oldFile = tmp.GetRandomFile(); 
 
-                tmp.RenameFile(oldFile, newName);
-                newFiles.Add((oldFile, newFile));
+            if (tmp.Files.Any())
+            {
+                for (var i = 0; i < renamesCount; i++)
+                {
+                    var newName = Path.GetRandomFileName();
+                    var newFile = Path.Join(tmp.FolderPath, newName);
+                    var oldFile = tmp.GetRandomFile();
+
+                    tmp.RenameFile(oldFile, newName);
+                    newFiles.Add((oldFile, newFile));
+                }
             }
 
             foreach (var file in files)

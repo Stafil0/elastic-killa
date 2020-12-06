@@ -272,8 +272,6 @@ namespace ElasticKilla.Tests.AnalyzersTests
 
             await Task.WhenAll(tasks);
             Assert.Equal(subscriptionsCount, analyzer.Subscriptions.Count);
-
-            analyzer.Dispose();
         }
 
         [Theory]

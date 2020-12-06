@@ -338,9 +338,12 @@ namespace ElasticKilla.Core.Analyzers
 
             if (disposing)
             {
-                _backgroundTaskQueue?.Dispose();
                 foreach (var (_, watcher) in _watchers)
                     UnsubscribeWatcher(watcher);
+
+                _backgroundTaskQueue?.Dispose();
+                _queueLock?.Dispose();
+                _subscriptionLock?.Dispose();
             }
 
             _disposed = true;

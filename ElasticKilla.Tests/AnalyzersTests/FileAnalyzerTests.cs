@@ -468,18 +468,21 @@ namespace ElasticKilla.Tests.AnalyzersTests
             var files = new List<string>();
             using (var tmp = new TempFolder(filesCount))
             {
+                long subscribed = 0;
+                var min = Math.Ceiling(filesCount * 0.25);
+
                 var folder = tmp.FolderPath;
                 files.AddRange(tmp.Files);
 
                 foreach (var file in files)
                 {
                     var sequence = new MockSequence();
-                    indexer.InSequence(sequence).Setup(x => x.Add(file, It.IsAny<IEnumerable<string>>()));
+                    indexer.InSequence(sequence).Setup(x => x.Add(file, It.IsAny<IEnumerable<string>>())).Callback(() => Interlocked.Increment(ref removes));
                     indexer.InSequence(sequence).Setup(x => x.Remove(file)).Callback(() => Interlocked.Increment(ref removes));
                 }
 
                 await Task.Run(async () => await analyzer.Subscribe(folder));
-                await Task.Delay(50 * filesCount);
+                SpinWait.SpinUntil(() => Interlocked.Read(ref subscribed) > min);
             }
 
             // Дадим всем событиям на удаление сработать.

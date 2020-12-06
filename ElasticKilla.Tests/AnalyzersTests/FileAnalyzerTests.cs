@@ -608,7 +608,7 @@ namespace ElasticKilla.Tests.AnalyzersTests
         [Theory]
         [InlineData(10, 5, 1)]
         [InlineData(100, 50, 10)]
-        [InlineData(1000, 500, 100)]
+        [InlineData(1000, 100, 100)]
         public async Task AfterSubscribeMultiple_FindFiles_ReturnResult_ChangeFiles_ReturnUpdated(int inits, int changes, int searches)
         {
             var rng = new Random();
@@ -620,7 +620,7 @@ namespace ElasticKilla.Tests.AnalyzersTests
                 var folderContent = new Dictionary<string, List<string>>();
                 for (var i = 0; i < count; i++)
                 {
-                    var guids =  new List<string>(Generators.Generate(1000, () => Guid.NewGuid().ToString()));
+                    var guids =  new List<string>(Generators.Generate(100, () => Guid.NewGuid().ToString()));
                     var text = string.Join(' ', guids);
                     var name = folder.CreateFile(() => text);
                     folderContent[name] = guids;
@@ -670,7 +670,7 @@ namespace ElasticKilla.Tests.AnalyzersTests
             var changedFiles = new Dictionary<string, List<string>>();
             for (var i = 0; i < changes; i++)
             {
-                var guids =  new List<string>(Generators.Generate(1000, () => Guid.NewGuid().ToString()));
+                var guids = new List<string>(Generators.Generate(100, () => Guid.NewGuid().ToString()));
                 var text = string.Join(' ', guids);
                 var key = keys[rng.Next(keys.Count)];
                 keys.Remove(key);

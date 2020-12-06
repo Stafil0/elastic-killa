@@ -489,7 +489,7 @@ namespace ElasticKilla.Tests.AnalyzersTests
                 }
 
                 await Task.Run(async () => await analyzer.Subscribe(folder));
-                SpinWait.SpinUntil(() => Interlocked.Read(ref subscribed) > min);
+                SpinWait.SpinUntil(() => Interlocked.Read(ref subscribed) >= min);
             }
 
             // Дадим всем событиям на удаление сработать.

@@ -451,12 +451,12 @@ namespace ElasticKilla.Tests.AnalyzersTests
         }
 
         [Theory]
-        [InlineData(0, 1)]
-        [InlineData(1, 1)]
-        [InlineData(10, 5)]
-        [InlineData(100, 15)]
-        [InlineData(500, 30)]
-        public async Task AfterSubscribe_DeleteFile_ReIndex(int filesCount, int timeout)
+        [InlineData(0)]
+        [InlineData(1)]
+        [InlineData(10)]
+        [InlineData(100)]
+        [InlineData(500)]
+        public async Task AfterSubscribe_DeleteFile_ReIndex(int filesCount)
         {
             var searcher = new Mock<ISearcher<string, string>>();
             var tokenizer = new Mock<ITokenizer<string>>();
@@ -488,11 +488,11 @@ namespace ElasticKilla.Tests.AnalyzersTests
                 }
 
                 await Task.Run(async () => await analyzer.Subscribe(folder));
-                SpinWait.SpinUntil(() => Interlocked.Read(ref subscribed) == filesCount);
+                SpinWait.SpinUntil(() => Interlocked.Read(ref subscribed) == filesCount, new TimeSpan(1, 0, 0));
             }
 
             // Дадим всем событиям на удаление сработать.
-            SpinWait.SpinUntil(() => Interlocked.Read(ref removes) == filesCount, new TimeSpan(0, timeout, 0));
+            SpinWait.SpinUntil(() => Interlocked.Read(ref removes) == filesCount, new TimeSpan(1, 0, 0));
 
             foreach (var file in files)
             {

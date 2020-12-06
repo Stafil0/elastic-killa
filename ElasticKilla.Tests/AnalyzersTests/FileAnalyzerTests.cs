@@ -423,17 +423,21 @@ namespace ElasticKilla.Tests.AnalyzersTests
             }
 
             var renamed = new List<(string, string)>();
+            long renames = 0; 
 
             for (var i = 0; i < renameCount; i++)
             {
                 var newFile = Path.GetRandomFileName();
-                var oldPath = tmp.RenameFile(newFile);
                 var newPath = PathExtensions.NormalizePath(Path.Join(tmp.FolderPath, newFile));
+                var oldPath = tmp.GetRandomFile();
+                indexer.Setup(x => x.Switch(oldPath, newPath)).Callback(() => Interlocked.Increment(ref renames));
+
+                tmp.RenameFile(oldPath, newFile);
                 renamed.Add((oldPath, newPath));
             }
 
             // Даем время сработать событиям переименования.
-            await Task.Delay(10 * renameCount);
+            SpinWait.SpinUntil(() => Interlocked.Read(ref renames) == renameCount);
 
             indexer.Verify(x => x.Switch(It.IsAny<string>(), It.IsAny<string>()), Times.Exactly(renameCount));
             foreach (var (oldPath, newPath) in renamed)
@@ -456,29 +460,26 @@ namespace ElasticKilla.Tests.AnalyzersTests
 
             var analyzer = new FileAnalyzer(tokenizer.Object, searcher.Object, indexer.Object);
 
-            string folder;
+            long removes = 0;
             var files = new List<string>();
             using (var tmp = new TempFolder(filesCount))
             {
-                folder = tmp.FolderPath;
+                var folder = tmp.FolderPath;
                 files.AddRange(tmp.Files);
-                
-                await Task.Run(async () => await analyzer.Subscribe(folder));
-                await Task.Delay(50 * filesCount);
 
                 foreach (var file in files)
                 {
                     var sequence = new MockSequence();
                     indexer.InSequence(sequence).Setup(x => x.Add(file, It.IsAny<IEnumerable<string>>()));
-                    indexer.InSequence(sequence).Setup(x => x.Remove(file));
+                    indexer.InSequence(sequence).Setup(x => x.Remove(file)).Callback(() => Interlocked.Increment(ref removes));
                 }
 
-                SpinWait.SpinUntil(() => !analyzer.IsIndexing);
+                await Task.Run(async () => await analyzer.Subscribe(folder));
+                await Task.Delay(filesCount);
             }
 
             // Дадим всем событиям на удаление сработать.
-            await Task.Delay(50 * filesCount);
-            SpinWait.SpinUntil(() => !analyzer.IsIndexing);
+            SpinWait.SpinUntil(() => Interlocked.Read(ref removes) == filesCount, new TimeSpan(0, 10, 0));
 
             foreach (var file in files)
             {
@@ -548,8 +549,8 @@ namespace ElasticKilla.Tests.AnalyzersTests
         [InlineData(100, 50, 100, 50)]
         [InlineData(1000, 500, 1000, 500)]
         public async Task AfterSubscribeMultiple_ChangeFiles_ReIndex(
-            int firstInitCount, int firstChangeCount,
-            int secondInitCount, int secondChangeCount)
+            int firstInitCount, int firstRenamesCount,
+            int secondInitCount, int secondRenamesCount)
         {
             var searcher = new Mock<ISearcher<string, string>>();
             var tokenizer = new Mock<ITokenizer<string>>();
@@ -568,29 +569,36 @@ namespace ElasticKilla.Tests.AnalyzersTests
             
             SpinWait.SpinUntil(() => !analyzer.IsIndexing);
 
-            indexer.Verify(x => x.Add(It.IsAny<string>(), It.IsAny<IEnumerable<string>>()), Times.Exactly(firstInitCount + secondInitCount));
+            var totalInits = firstInitCount + secondInitCount;
+            indexer.Verify(x => x.Add(It.IsAny<string>(), It.IsAny<IEnumerable<string>>()), Times.Exactly(totalInits));
 
             var renamed = new List<(string, string)>();
+            long renames = 0;
 
-            static (string, string) Rename(TempFolder folder)
+            (string, string) Rename(TempFolder folder)
             {
                 var newFile = Path.GetRandomFileName();
-                var oldPath = folder.RenameFile(newFile);
                 var newPath = PathExtensions.NormalizePath(Path.Join(folder.FolderPath, newFile));
+                var oldPath = folder.GetRandomFile();
+                
+                indexer.Setup(x => x.Switch(oldPath, newPath)).Callback(() => Interlocked.Increment(ref renames));
+                
+                folder.RenameFile(oldPath, newFile);
+
                 return (oldPath, newPath);
             }
 
-            for (var i = 0; i < firstChangeCount; i++)
-                renamed.Add(Rename(firstTemp));
+            for (var i = 0; i < firstRenamesCount; i++)
+                renamed.Add( Rename(firstTemp));
 
-            for (var i = 0; i < secondChangeCount; i++)
+            for (var i = 0; i < secondRenamesCount; i++)
                 renamed.Add(Rename(secondTemp));
 
             // Даем время сработать событиям переименования.
-            await Task.Delay(50 * (firstChangeCount + secondChangeCount));
-            SpinWait.SpinUntil(() => !analyzer.IsIndexing);
+            var totalRenames = firstRenamesCount + secondRenamesCount;
+            SpinWait.SpinUntil(() => Interlocked.Read(ref renames) == totalRenames, new TimeSpan(0, 10, 0));
 
-            indexer.Verify(x => x.Switch(It.IsAny<string>(), It.IsAny<string>()), Times.Between(1, firstChangeCount + secondChangeCount, Range.Inclusive));
+            indexer.Verify(x => x.Switch(It.IsAny<string>(), It.IsAny<string>()), Times.Exactly(totalRenames));
             foreach (var (oldPath, newPath) in renamed)
             {
                 indexer.Verify(x => x.Switch(oldPath, newPath), Times.Once);
@@ -876,17 +884,19 @@ namespace ElasticKilla.Tests.AnalyzersTests
 
             var unsubscribe = Task.Run(async () => await analyzer.Unsubscribe(folder));
             await Task.Delay(10);
-
+            
             var newFiles = new List<(string oldFile, string newFile)>();
             for (var i = 0; i < newFilesCount; i++)
             {
                 var sequence = new MockSequence();
                 var newName = Path.GetRandomFileName();
                 var newFile = Path.Join(tmp.FolderPath, newName);
-                var oldFile = tmp.RenameFile(newName);
-
+                var oldFile = tmp.GetRandomFile();
+                
                 indexer.InSequence(sequence).Setup(x => x.Switch(oldFile, newFile));
                 indexer.InSequence(sequence).Setup(x => x.Remove(newFile));
+                
+                tmp.RenameFile(oldFile, newName);
                 newFiles.Add((oldFile, newFile));
             }
 
@@ -933,7 +943,9 @@ namespace ElasticKilla.Tests.AnalyzersTests
             {
                 var newName = Path.GetRandomFileName();
                 var newFile = Path.Join(tmp.FolderPath, newName);
-                var oldFile = tmp.RenameFile(newName);
+                var oldFile = tmp.GetRandomFile(); 
+
+                tmp.RenameFile(oldFile, newName);
                 newFiles.Add((oldFile, newFile));
             }
 

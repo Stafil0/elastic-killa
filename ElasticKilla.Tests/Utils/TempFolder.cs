@@ -15,6 +15,8 @@ namespace ElasticKilla.Tests.Utils
 
         public readonly string FolderPath;
 
+        public string GetRandomFile() => PathExtensions.NormalizePath(Files[_rng.Next(Files.Count)]);
+        
         public string CreateFile(string extension = null) => CreateFile(() => string.Empty, extension);
         
         public string CreateFile(Func<string> generator, string extension = null)
@@ -58,22 +60,20 @@ namespace ElasticKilla.Tests.Utils
             return true;
         }
 
-        public string RenameFile(string newName)
+        public bool RenameFile(string oldFile, string newName)
         {
-            if (!Files.Any())
-                CreateFile(() => string.Empty);
-
-            var index = _rng.Next(Files.Count);
-            var file = Files[index];
-            var directory = Path.GetDirectoryName(file);
-            var newFile = Path.Join(directory, newName);
+            if (Files.FirstOrDefault(x => x.Equals(oldFile, StringComparison.InvariantCultureIgnoreCase)) == null)
+                return false;
             
+            var directory = Path.GetDirectoryName(oldFile);
+            var newFile = Path.Join(directory, newName);
+
             newFile = PathExtensions.NormalizePath(newFile);
 
-            File.Move(file, newFile);
-            Files.Remove(file);
+            File.Move(oldFile, newFile);
+            Files.Remove(oldFile);
             Files.Add(newFile);
-            return file;
+            return true;
         }
 
         public void Dispose()

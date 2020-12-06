@@ -465,20 +465,27 @@ namespace ElasticKilla.Tests.AnalyzersTests
             var analyzer = new FileAnalyzer(tokenizer.Object, searcher.Object, indexer.Object);
 
             long removes = 0;
+            long subscribed = 0;
             var files = new List<string>();
             using (var tmp = new TempFolder(filesCount))
             {
-                long subscribed = 0;
-                var min = Math.Ceiling(filesCount * 0.25);
-
+                var min = filesCount > 0 ? (int) Math.Ceiling(filesCount * 0.10) : 0;
                 var folder = tmp.FolderPath;
                 files.AddRange(tmp.Files);
-
+                
                 foreach (var file in files)
                 {
                     var sequence = new MockSequence();
-                    indexer.InSequence(sequence).Setup(x => x.Add(file, It.IsAny<IEnumerable<string>>())).Callback(() => Interlocked.Increment(ref removes));
-                    indexer.InSequence(sequence).Setup(x => x.Remove(file)).Callback(() => Interlocked.Increment(ref removes));
+
+                    indexer
+                        .InSequence(sequence)
+                        .Setup(x => x.Add(file, It.IsAny<IEnumerable<string>>()))
+                        .Callback(() => Interlocked.Increment(ref subscribed));
+
+                    indexer
+                        .InSequence(sequence)
+                        .Setup(x => x.Remove(file))
+                        .Callback(() => Interlocked.Increment(ref removes));
                 }
 
                 await Task.Run(async () => await analyzer.Subscribe(folder));

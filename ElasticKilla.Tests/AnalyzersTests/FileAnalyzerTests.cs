@@ -308,10 +308,10 @@ namespace ElasticKilla.Tests.AnalyzersTests
             await Task.Delay(1000);
 
             var search = analyzer.Search(guid).ToList();
-            Assert.InRange(search.Count, filesCount > 0 ? 1 : 0, filesCount);
+            Assert.InRange(search.Count,  0, filesCount);
 
             await subscribe;
-            await Task.Delay(1000);
+            await Task.Delay(filesCount * 10);
 
             search = analyzer.Search(guid).ToList();
             Assert.Equal(filesCount, search.Count);
@@ -447,12 +447,12 @@ namespace ElasticKilla.Tests.AnalyzersTests
         }
 
         [Theory]
-        [InlineData(0)]
-        [InlineData(1)]
-        [InlineData(10)]
-        [InlineData(100)]
-        [InlineData(1000)]
-        public async Task AfterSubscribe_DeleteFile_ReIndex(int filesCount)
+        [InlineData(0, 1)]
+        [InlineData(1, 1)]
+        [InlineData(10, 1)]
+        [InlineData(100, 5)]
+        [InlineData(1000, 20)]
+        public async Task AfterSubscribe_DeleteFile_ReIndex(int filesCount, int timeout)
         {
             var searcher = new Mock<ISearcher<string, string>>();
             var tokenizer = new Mock<ITokenizer<string>>();
@@ -479,7 +479,7 @@ namespace ElasticKilla.Tests.AnalyzersTests
             }
 
             // Дадим всем событиям на удаление сработать.
-            SpinWait.SpinUntil(() => Interlocked.Read(ref removes) == filesCount, new TimeSpan(0, 10, 0));
+            SpinWait.SpinUntil(() => Interlocked.Read(ref removes) == filesCount, new TimeSpan(0, timeout, 0));
 
             foreach (var file in files)
             {

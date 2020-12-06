@@ -1,4 +1,4 @@
-elastic-killa </br> [![Build status](https://ci.appveyor.com/api/projects/status/4pyqlky5g9es8ikh/branch/main?svg=true)](https://ci.appveyor.com/project/Stafil0/elastic-killa/branch/main)
+elastic-killa </br> [![Build status](https://ci.appveyor.com/api/projects/status/4pyqlky5g9es8ikh/branch/main?svg=true)](https://ci.appveyor.com/project/Stafil0/elastic-killa/branch/main) [![codecov](https://codecov.io/gh/Stafil0/elastic-killa/branch/main/graph/badge.svg?token=GQZKV4VK1V)](https://codecov.io/gh/Stafil0/elastic-killa)
 =============
 ###### *Trying to create search engine by myself.*
 

@@ -450,7 +450,7 @@ namespace ElasticKilla.Tests.AnalyzersTests
         [InlineData(0, 1)]
         [InlineData(1, 1)]
         [InlineData(10, 1)]
-        [InlineData(100, 5)]
+        [InlineData(100, 10)]
         [InlineData(500, 20)]
         public async Task AfterSubscribe_DeleteFile_ReIndex(int filesCount, int timeout)
         {
@@ -475,7 +475,7 @@ namespace ElasticKilla.Tests.AnalyzersTests
                 }
 
                 await Task.Run(async () => await analyzer.Subscribe(folder));
-                await Task.Delay(10 * filesCount);
+                Thread.Sleep(10000);
             }
 
             // Дадим всем событиям на удаление сработать.

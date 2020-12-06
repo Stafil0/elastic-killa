@@ -475,7 +475,7 @@ namespace ElasticKilla.Tests.AnalyzersTests
                 }
 
                 await Task.Run(async () => await analyzer.Subscribe(folder));
-                await Task.Delay(filesCount);
+                await Task.Delay(10 * filesCount);
             }
 
             // Дадим всем событиям на удаление сработать.

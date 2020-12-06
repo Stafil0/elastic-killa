@@ -5,7 +5,7 @@ using System.Linq;
 using System.Text;
 using ElasticKilla.Core.Extensions;
 
-namespace ElasticKilla.Tests.TestExtensions
+namespace ElasticKilla.Tests.Utils
 {
     public class TempFolder : IDisposable
     {
@@ -42,6 +42,21 @@ namespace ElasticKilla.Tests.TestExtensions
         }
 
         public void CreateFiles(int count, string extension = null) => CreateFiles(count, () => string.Empty, extension);
+
+        public bool ChangeFile(string name, Func<string> generator)
+        {
+            var normalized = PathExtensions.NormalizePath(name);
+            var file = Files.FirstOrDefault(x => PathExtensions.NormalizePath(x).Equals(normalized, StringComparison.InvariantCultureIgnoreCase));
+            if (string.IsNullOrEmpty(file))
+                return false;
+
+            using var stream = File.OpenWrite(file);
+            
+            stream.Seek(0, SeekOrigin.Begin);
+            stream.Write(Encoding.UTF8.GetBytes(generator()));
+
+            return true;
+        }
 
         public string RenameFile(string newName)
         {

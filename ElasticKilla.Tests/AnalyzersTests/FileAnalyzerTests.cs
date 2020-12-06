@@ -1,7 +1,9 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using ElasticKilla.Core.Analyzers;
 using ElasticKilla.Core.Extensions;
@@ -9,6 +11,7 @@ using ElasticKilla.Core.Indexers;
 using ElasticKilla.Core.Searchers;
 using ElasticKilla.Core.Tokenizer;
 using ElasticKilla.Tests.TestExtensions;
+using ElasticKilla.Tests.Utils;
 using Moq;
 using Xunit;
 
@@ -167,7 +170,7 @@ namespace ElasticKilla.Tests.AnalyzersTests
             }
 
             await Task.WhenAll(tasks);
-            await Task.Delay(5 * subscriptionsCount);
+            SpinWait.SpinUntil(() => !analyzer.IsIndexing);
             
             Assert.InRange(analyzer.Subscriptions.Count, subscriptionsCount > 0 ? 1 : 0, subscriptionsCount);
         }
@@ -235,7 +238,7 @@ namespace ElasticKilla.Tests.AnalyzersTests
             Assert.True(analyzer.IsIndexing);
 
             await task;
-            await Task.Delay(5 * filesCount);
+            SpinWait.SpinUntil(() => !analyzer.IsIndexing);
 
             Assert.False(analyzer.IsIndexing);
         }
@@ -251,7 +254,7 @@ namespace ElasticKilla.Tests.AnalyzersTests
             var indexer = new Mock<IIndexer<string, string>>();
             var tokenizer = new Mock<ITokenizer<string>>();
 
-            using var analyzer = new FileAnalyzer(tokenizer.Object, searcher.Object, indexer.Object);
+            var analyzer = new FileAnalyzer(tokenizer.Object, searcher.Object, indexer.Object);
 
             var tasks = new List<Task>();
             for (var i = 0; i < subscriptionsCount; i++)
@@ -269,6 +272,8 @@ namespace ElasticKilla.Tests.AnalyzersTests
 
             await Task.WhenAll(tasks);
             Assert.Equal(subscriptionsCount, analyzer.Subscriptions.Count);
+
+            analyzer.Dispose();
         }
 
         [Theory]
@@ -337,15 +342,14 @@ namespace ElasticKilla.Tests.AnalyzersTests
 
             var subscribe = Task.Run(async () => await analyzer.Subscribe(path));
 
-            await Task.Delay(100);
+            await Task.Delay(2 * filesCount);
 
             var search = Task.Run(async () => await analyzer.DelayedSearch(guid));
 
             await search;
             await subscribe;
 
-            indexer.Verify(x => x.Add(It.IsAny<string>(), It.IsAny<IEnumerable<string>>()),
-                Times.Exactly(tmp.Files.Count));
+            indexer.Verify(x => x.Add(It.IsAny<string>(), It.IsAny<IEnumerable<string>>()), Times.Exactly(tmp.Files.Count));
             searcher.Verify(x => x.Search(guid), Times.Once);
         }
     }
@@ -378,8 +382,7 @@ namespace ElasticKilla.Tests.AnalyzersTests
             tmp.CreateFiles(count);
             await Task.Delay(10 * count);
 
-            indexer.Verify(x => x.Add(It.IsAny<string>(), It.IsAny<IEnumerable<string>>()),
-                Times.Exactly(initCount + count));
+            indexer.Verify(x => x.Add(It.IsAny<string>(), It.IsAny<IEnumerable<string>>()), Times.Exactly(initCount + count));
 
             foreach (var file in tmp.Files)
             {
@@ -496,7 +499,7 @@ namespace ElasticKilla.Tests.AnalyzersTests
             var guid = guids[random.Next(guids.Length)];
 
             await Task.Run(async () => await analyzer.Subscribe(path));
-            await Task.Delay(filesCount);
+            SpinWait.SpinUntil(() => !analyzer.IsIndexing);
 
             var search = analyzer.Search(guid).ToList();
             Assert.Equal(filesCount, search.Count);
@@ -551,7 +554,63 @@ namespace ElasticKilla.Tests.AnalyzersTests
             var first = Task.Run(async () => await analyzer.Subscribe(firstFolder));
             var second = Task.Run(async () => await analyzer.Subscribe(secondFolder));
             await Task.WhenAll(first, second);
-            await Task.Delay(1000);
+            
+            SpinWait.SpinUntil(() => !analyzer.IsIndexing);
+
+            indexer.Verify(x => x.Add(It.IsAny<string>(), It.IsAny<IEnumerable<string>>()), Times.Exactly(firstInitCount + secondInitCount));
+
+            var renamed = new List<(string, string)>();
+
+            static (string, string) Rename(TempFolder folder)
+            {
+                var newFile = Path.GetRandomFileName();
+                var oldPath = folder.RenameFile(newFile);
+                var newPath = PathExtensions.NormalizePath(Path.Join(folder.FolderPath, newFile));
+                return (oldPath, newPath);
+            }
+
+            for (var i = 0; i < firstChangeCount; i++)
+                renamed.Add(Rename(firstTemp));
+
+            for (var i = 0; i < secondChangeCount; i++)
+                renamed.Add(Rename(secondTemp));
+
+            // Даем время сработать событиям переименования.
+            await Task.Delay(5 * (firstChangeCount + secondChangeCount));
+
+            indexer.Verify(x => x.Switch(It.IsAny<string>(), It.IsAny<string>()),
+                Times.Exactly(firstChangeCount + secondChangeCount));
+            foreach (var (oldPath, newPath) in renamed)
+            {
+                indexer.Verify(x => x.Switch(oldPath, newPath), Times.Once);
+            }
+        }
+        
+        
+        [Theory]
+        [InlineData(10, 5, 10, 5)]
+        [InlineData(100, 50, 100, 50)]
+        [InlineData(1000, 500, 1000, 500)]
+        public async Task AfterSubscribeMultiple_FindFiles_ReturnResult(
+            int firstInitCount, int firstChangeCount,
+            int secondInitCount, int secondChangeCount)
+        {
+            var searcher = new Mock<ISearcher<string, string>>();
+            var tokenizer = new Mock<ITokenizer<string>>();
+            var indexer = new Mock<IIndexer<string, string>>();
+
+            var analyzer = new FileAnalyzer(tokenizer.Object, searcher.Object, indexer.Object);
+
+            using var firstTemp = new TempFolder(firstInitCount);
+            using var secondTemp = new TempFolder(secondInitCount);
+
+            var firstFolder = firstTemp.FolderPath;
+            var secondFolder = secondTemp.FolderPath;
+            var first = Task.Run(async () => await analyzer.Subscribe(firstFolder));
+            var second = Task.Run(async () => await analyzer.Subscribe(secondFolder));
+            await Task.WhenAll(first, second);
+
+            SpinWait.SpinUntil(() => !analyzer.IsIndexing);
 
             indexer.Verify(x => x.Add(It.IsAny<string>(), It.IsAny<IEnumerable<string>>()),
                 Times.Exactly(firstInitCount + secondInitCount));
@@ -582,6 +641,115 @@ namespace ElasticKilla.Tests.AnalyzersTests
                 indexer.Verify(x => x.Switch(oldPath, newPath), Times.Once);
             }
         }
+        
+        [Theory]
+        [InlineData(10, 5, 1)]
+        [InlineData(100, 50, 10)]
+        [InlineData(1000, 500, 100)]
+        public async Task AfterSubscribeMultiple_FindFiles_ReturnResult_ChangeFiles_ReturnUpdated(int inits, int changes, int searches)
+        {
+            var rng = new Random();
+            var tokenizer = new WhitespaceTokenizer();
+            var analyzer = new FileAnalyzer(tokenizer);
+
+            Dictionary<string, List<string>> InitFolder(TempFolder folder, int count)
+            {
+                var folderContent = new Dictionary<string, List<string>>();
+                for (var i = 0; i < count; i++)
+                {
+                    var guids =  new List<string>(Generators.Generate(1000, () => Guid.NewGuid().ToString()));
+                    var text = string.Join(' ', guids);
+                    var name = folder.CreateFile(() => text);
+                    folderContent[name] = guids;
+                }
+
+                return folderContent;
+            }
+
+            using var tmp = new TempFolder(0);
+            var content = InitFolder(tmp, inits);
+
+            await analyzer.Subscribe(tmp.FolderPath);
+
+            var keys = content.Keys.ToList();
+            var searchTasks = new Dictionary<string, Task<IEnumerable<string>>>();
+            var delayedSearchTasks = new Dictionary<string, Task<IEnumerable<string>>>();
+            for (var i = 0; i < searches; i++)
+            {
+                var key = keys[rng.Next(keys.Count)];
+                var values = content[key];
+                var query = values[rng.Next(values.Count)];
+                searchTasks[key] = Task.Run(() => analyzer.Search(query));
+                delayedSearchTasks[key] = Task.Run(async () => await analyzer.DelayedSearch(query));
+            }
+
+            await Task.WhenAll(searchTasks.Values);
+            await Task.WhenAll(delayedSearchTasks.Values);
+
+            Assert.All(searchTasks, kv =>
+            {
+                var (key, task) = kv;
+                var result = task.Result.ToList();
+                if (result.Any())
+                    Assert.All(result, s => Assert.True(s.Equals(key, StringComparison.InvariantCultureIgnoreCase)));
+            });
+
+            Assert.All(delayedSearchTasks, kv =>
+            {
+                var (key, task) = kv;
+                var result = task.Result.ToList();
+                Assert.NotEmpty(result);
+                Assert.All(result, s => Assert.True(s.Equals(key, StringComparison.InvariantCultureIgnoreCase)));
+            });
+
+            SpinWait.SpinUntil(() => !analyzer.IsIndexing);
+
+            var changesTasks = new List<Task>();
+            var changedFiles = new Dictionary<string, List<string>>();
+            for (var i = 0; i < changes; i++)
+            {
+                var guids =  new List<string>(Generators.Generate(1000, () => Guid.NewGuid().ToString()));
+                var text = string.Join(' ', guids);
+                var key = keys[rng.Next(keys.Count)];
+                keys.Remove(key);
+
+                changedFiles[key] = guids;
+                changesTasks.Add(Task.Run(() => tmp.ChangeFile(key, () => text)));
+            }
+
+            await Task.WhenAll(changesTasks);
+
+            keys = changedFiles.Keys.ToList();
+            searchTasks = new Dictionary<string, Task<IEnumerable<string>>>();
+            delayedSearchTasks = new Dictionary<string, Task<IEnumerable<string>>>();
+            for (var i = 0; i < searches; i++)
+            {
+                var key = keys[rng.Next(keys.Count)];
+                var values = changedFiles[key];
+                var query = values[rng.Next(values.Count)];
+                searchTasks[key] = Task.Run(() => analyzer.Search(query));
+                delayedSearchTasks[key] = Task.Run(async () => await analyzer.DelayedSearch(query));
+            }
+
+            await Task.WhenAll(searchTasks.Values);
+            await Task.WhenAll(delayedSearchTasks.Values);
+
+            Assert.All(searchTasks, kv =>
+            {
+                var (key, task) = kv;
+                var result = task.Result.ToList();
+                if (result.Any())
+                    Assert.All(result, s => Assert.True(s.Equals(key, StringComparison.InvariantCultureIgnoreCase)));
+            });
+
+            Assert.All(delayedSearchTasks, kv =>
+            {
+                var (key, task) = kv;
+                var result = task.Result.ToList();
+                Assert.NotEmpty(result);
+                Assert.All(result, s => Assert.True(s.Equals(key, StringComparison.InvariantCultureIgnoreCase)));
+            });
+        }
     }
 
     public class OnUnsubscribeFileAnalyzerTests
@@ -608,14 +776,10 @@ namespace ElasticKilla.Tests.AnalyzersTests
             }
 
             await Task.Run(async () => await analyzer.Subscribe(tmp.FolderPath));
-
-            // Дадим попдисаться.
-            await Task.Delay(1000);
+            SpinWait.SpinUntil(() => !analyzer.IsIndexing);
 
             await Task.Run(async () => await analyzer.Unsubscribe(tmp.FolderPath));
-
-            // Дадим отписаться.
-            await Task.Delay(1000);
+            SpinWait.SpinUntil(() => !analyzer.IsIndexing);
 
             indexer.Verify(x => x.Add(It.IsAny<string>(), It.IsAny<IEnumerable<string>>()), Times.Exactly(filesCount));
             foreach (var file in tmp.Files)
@@ -639,14 +803,10 @@ namespace ElasticKilla.Tests.AnalyzersTests
                 indexer.Setup(x => x.Add(file, It.IsAny<IEnumerable<string>>()));
 
             await Task.Run(async () => await analyzer.Subscribe(tmp.FolderPath));
-
-            // Дадим попдисаться.
-            await Task.Delay(150);
+            SpinWait.SpinUntil(() => !analyzer.IsIndexing);
 
             await Task.Run(async () => await analyzer.Unsubscribe(Path.GetRandomFileName()));
-
-            // Дадим "отписаться".
-            await Task.Delay(150);
+            SpinWait.SpinUntil(() => !analyzer.IsIndexing);
 
             indexer.Verify(x => x.Add(It.IsAny<string>(), It.IsAny<IEnumerable<string>>()), Times.Exactly(filesCount));
             foreach (var file in tmp.Files)
@@ -679,14 +839,10 @@ namespace ElasticKilla.Tests.AnalyzersTests
             }
 
             await Task.Run(async () => await analyzer.Subscribe(folder));
-
-            // Дадим попдисаться.
-            await Task.Delay(1000);
+            SpinWait.SpinUntil(() => !analyzer.IsIndexing);
 
             var unsub = Task.Run(async () => await analyzer.Unsubscribe(folder));
-
-            // Дадим отписаться.
-            await Task.Delay(1000);
+            await Task.Delay(100);
 
             var sub = Task.Run(async () => await analyzer.Subscribe(folder));
 
@@ -717,7 +873,7 @@ namespace ElasticKilla.Tests.AnalyzersTests
             var folder = tmp.FolderPath;
 
             await Task.Run(async () => await analyzer.Subscribe(folder));
-            await Task.Delay(150);
+            SpinWait.SpinUntil(() => !analyzer.IsIndexing);
 
             var unsubscribe = Task.Run(async () => await analyzer.Unsubscribe(folder));
             await Task.Delay(10);
@@ -758,7 +914,7 @@ namespace ElasticKilla.Tests.AnalyzersTests
             var folder = tmp.FolderPath;
 
             await Task.Run(async () => await analyzer.Subscribe(folder));
-            await Task.Delay(150);
+            SpinWait.SpinUntil(() => !analyzer.IsIndexing);
 
             var unsubscribe = Task.Run(async () => await analyzer.Unsubscribe(folder));
             await Task.Delay(10);
@@ -809,10 +965,10 @@ namespace ElasticKilla.Tests.AnalyzersTests
                 indexer.Setup(x => x.Remove(file));
 
             await Task.Run(async () => await analyzer.Subscribe(folder));
-            await Task.Delay(150);
+            SpinWait.SpinUntil(() => !analyzer.IsIndexing);
 
             await Task.Run(async () => await analyzer.Unsubscribe(folder));
-            await Task.Delay(150);
+            SpinWait.SpinUntil(() => !analyzer.IsIndexing);
 
             var newFiles = new List<(string oldFile, string newFile)>();
             for (var i = 0; i < newFilesCount; i++)
@@ -893,10 +1049,10 @@ namespace ElasticKilla.Tests.AnalyzersTests
             var guid = guids[random.Next(guids.Length)];
 
             await Task.Run(async () => await analyzer.Subscribe(path));
-            await Task.Delay(1000);
+            SpinWait.SpinUntil(() => !analyzer.IsIndexing);
 
             await Task.Run(async () => await analyzer.Unsubscribe(path));
-            await Task.Delay(1000);
+            SpinWait.SpinUntil(() => !analyzer.IsIndexing);
 
             var search = analyzer.Search(guid).ToList();
             Assert.Empty(search);

@@ -453,9 +453,9 @@ namespace ElasticKilla.Tests.AnalyzersTests
         [Theory]
         [InlineData(0, 1)]
         [InlineData(1, 1)]
-        [InlineData(10, 1)]
-        [InlineData(100, 10)]
-        [InlineData(500, 20)]
+        [InlineData(10, 5)]
+        [InlineData(100, 15)]
+        [InlineData(500, 30)]
         public async Task AfterSubscribe_DeleteFile_ReIndex(int filesCount, int timeout)
         {
             var searcher = new Mock<ISearcher<string, string>>();
@@ -469,7 +469,6 @@ namespace ElasticKilla.Tests.AnalyzersTests
             var files = new List<string>();
             using (var tmp = new TempFolder(filesCount))
             {
-                var min = filesCount > 0 ? (int) Math.Ceiling(filesCount * 0.10) : 0;
                 var folder = tmp.FolderPath;
                 files.AddRange(tmp.Files);
                 
@@ -489,7 +488,7 @@ namespace ElasticKilla.Tests.AnalyzersTests
                 }
 
                 await Task.Run(async () => await analyzer.Subscribe(folder));
-                SpinWait.SpinUntil(() => Interlocked.Read(ref subscribed) >= min);
+                SpinWait.SpinUntil(() => Interlocked.Read(ref subscribed) == filesCount);
             }
 
             // Дадим всем событиям на удаление сработать.

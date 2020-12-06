@@ -666,8 +666,7 @@ namespace ElasticKilla.Tests.AnalyzersTests
             });
 
             SpinWait.SpinUntil(() => !analyzer.IsIndexing);
-
-            var changesTasks = new List<Task>();
+            
             var changedFiles = new Dictionary<string, List<string>>();
             for (var i = 0; i < changes; i++)
             {
@@ -677,11 +676,10 @@ namespace ElasticKilla.Tests.AnalyzersTests
                 keys.Remove(key);
 
                 changedFiles[key] = guids;
-                changesTasks.Add(Task.Run(() => tmp.ChangeFile(key, () => text)));
+                tmp.ChangeFile(key, () => text);
             }
 
-            await Task.WhenAll(changesTasks);
-            await Task.Delay(5 * changes);
+            await Task.Delay(10 * changes);
 
             SpinWait.SpinUntil(() => !analyzer.IsIndexing);
 

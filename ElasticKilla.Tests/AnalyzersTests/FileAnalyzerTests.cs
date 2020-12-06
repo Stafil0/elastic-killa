@@ -339,13 +339,18 @@ namespace ElasticKilla.Tests.AnalyzersTests
 
             var guid = guids[random.Next(guids.Length)];
 
+            long subscribed = 0;
             var sequence = new MockSequence();
-            indexer.InSequence(sequence).Setup(x => x.Add(It.IsAny<string>(), It.IsAny<IEnumerable<string>>()));
+            indexer
+                .InSequence(sequence)
+                .Setup(x => x.Add(It.IsAny<string>(), It.IsAny<IEnumerable<string>>()))
+                .Callback(() => Interlocked.Increment(ref subscribed));
+
             searcher.InSequence(sequence).Setup(x => x.Search(guid)).Returns(tmp.Files);
 
             var subscribe = Task.Run(async () => await analyzer.Subscribe(path));
 
-            await Task.Delay(2 * filesCount);
+            SpinWait.SpinUntil(() => Interlocked.Read(ref subscribed) > 0);
 
             var search = Task.Run(async () => await analyzer.DelayedSearch(guid));
 

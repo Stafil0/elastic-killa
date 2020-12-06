@@ -451,7 +451,7 @@ namespace ElasticKilla.Tests.AnalyzersTests
         [InlineData(1, 1)]
         [InlineData(10, 1)]
         [InlineData(100, 5)]
-        [InlineData(1000, 20)]
+        [InlineData(500, 20)]
         public async Task AfterSubscribe_DeleteFile_ReIndex(int filesCount, int timeout)
         {
             var searcher = new Mock<ISearcher<string, string>>();

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 using ElasticKilla.Core.Indexes;
 
 namespace ElasticKilla.Core.Indexers
@@ -94,11 +95,13 @@ namespace ElasticKilla.Core.Indexers
             if (query == null || values == null)
                 return;
 
-            foreach (var item in values.AsParallel())
+            var tasks = values.Select(x => Task.Run(() =>
             {
-                Debug.WriteLine($"Adding \"{item}\" for \"{query}\" query to inverted index. Thread = {Thread.CurrentThread.ManagedThreadId}");
-                _inverted.Add(item, query);
-            }
+                Debug.WriteLine($"Adding \"{x}\" for \"{query}\" query to inverted index. Thread = {Thread.CurrentThread.ManagedThreadId}");
+                _inverted.Add(x, query);
+            })).ToArray();
+
+            Task.WaitAll(tasks);
         }
 
         private void OnForwardRemoved(TKey query, IEnumerable<TValue> values)
@@ -106,11 +109,13 @@ namespace ElasticKilla.Core.Indexers
             if (query == null || values == null)
                 return;
 
-            foreach (var item in values.AsParallel())
+            var tasks = values.Select(x => Task.Run(() =>
             {
-                Debug.WriteLine($"Removing \"{item}\" for \"{query}\" query from inverted index. Thread = {Thread.CurrentThread.ManagedThreadId}");
-                _inverted.Remove(item, query);
-            }
+                Debug.WriteLine($"Adding \"{x}\" for \"{query}\" query to inverted index. Thread = {Thread.CurrentThread.ManagedThreadId}");
+                _inverted.Remove(x, query);
+            })).ToArray();
+
+            Task.WaitAll(tasks);
         }
 
         public Indexer(IIndex<TKey, TValue> forwardIndex, IIndex<TValue, TKey> invertedIndex)

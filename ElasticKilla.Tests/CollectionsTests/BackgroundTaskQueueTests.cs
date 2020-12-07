@@ -155,16 +155,16 @@ namespace ElasticKilla.Tests.CollectionsTests
             cat.InSequence(sequence2).Setup(x => x.Purrr(2));
             cat.InSequence(sequence2).Setup(x => x.Purrr(4));
 
-            var task1 = queue.QueueTask(key1, async () => { await Task.Delay(1000); cat.Object.Purrr(1); }, cancel);
+            var task1 = queue.QueueTask(key1, async () => { await Task.Delay(5000); cat.Object.Purrr(1); }, cancel);
             var task2 = queue.QueueTask(key1, async () => { await Task.Delay(1000000); cat.Object.Purrr(2); }, cancel);
             var task3 = queue.QueueTask(key1, async () => { await Task.Delay(10); cat.Object.Purrr(3); });
-            var task4 = queue.QueueTask(key2, async () => { await Task.Delay(1000); cat.Object.Purrr(4); }, cancel);
+            var task4 = queue.QueueTask(key2, async () => { await Task.Delay(5000); cat.Object.Purrr(4); }, cancel);
             var task5 = queue.QueueTask(key2, async () => { await Task.Delay(1000000); cat.Object.Purrr(5); }, cancel);
             var task6 = queue.QueueTask(key2, async () => { await Task.Delay(10); cat.Object.Purrr(6); });
-            
+
             await Task.Run(async () =>
             {
-                await Task.Delay(100);
+                await Task.Delay(10);
                 queue.CancelTasks(cancel);
             });
 

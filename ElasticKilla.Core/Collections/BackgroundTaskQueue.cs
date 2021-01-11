@@ -51,17 +51,20 @@ namespace ElasticKilla.Core.Collections
             }
         }
 
-        public Task QueueTask(TKey key, Func<Task> action, string cancellationKey = null)
+        public Task QueueTask(TKey key, Func<CancellationToken, Task> action, string cancellationKey = null)
         {
             using (new WriteLockCookie(_lock))
             {
                 ClearCompletedTasks();
 
+                var token = GetCancellationToken(cancellationKey); 
                 var lastTask = _tasks.GetOrAdd(key, Task.FromResult(true));
-                var newTask = lastTask.ContinueWith( t => action().Wait(),
-                    GetCancellationToken(cancellationKey),
-                    TaskContinuationOptions.RunContinuationsAsynchronously,
-                    TaskScheduler.Current);
+                var newTask = lastTask
+                    .ContinueWith( t => action(token),
+                        token,
+                        TaskContinuationOptions.RunContinuationsAsynchronously,
+                        TaskScheduler.Current)
+                    .Unwrap();
 
                 _tasks.TryUpdate(key, newTask, lastTask);
                 return newTask;

@@ -66,7 +66,7 @@ namespace ElasticKilla.Tests.CollectionsTests
             Assert.True(task1.IsCompleted);
             Assert.All(new [] {task2, task3}, task => Assert.True(task.IsCanceled));
 
-            cat.Verify(x => x.Purrr(1), Times.Once);
+            cat.Verify(x => x.Purrr(1), Times.Never);
             cat.Verify(x => x.Purrr(2), Times.Never);
             cat.Verify(x => x.Purrr(3), Times.Never);
         }
@@ -100,7 +100,7 @@ namespace ElasticKilla.Tests.CollectionsTests
             Assert.All(new [] {task1, task4}, task => Assert.True(task.IsCompleted));
             Assert.All(new [] {task2, task3}, task => Assert.True(task.IsCanceled));
 
-            cat.Verify(x => x.Purrr(1), Times.Once);
+            cat.Verify(x => x.Purrr(1), Times.Never);
             cat.Verify(x => x.Purrr(2), Times.Never);
             cat.Verify(x => x.Purrr(3), Times.Never);
             cat.Verify(x => x.Purrr(4), Times.Once);

@@ -44,5 +44,7 @@ elastic-killa </br> [![Build status](https://ci.appveyor.com/api/projects/status
 - [x] CLI;
 - [x] кучку тестов;
 - [x] кучку зеленых тестов;
+
+*Свои доп-плюшки:*
 - [ ] индекс с поддержкой wildcard-поиска ([например](https://ru.wikipedia.org/wiki/Префиксное_дерево "например"));
 - [ ] сохранение и загрузка индексов (поддержка состояния).
